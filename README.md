@@ -1,4 +1,4 @@
-## dependencies
+## Dependencies
 sudo apt-get install libyaml-cpp-dev
 
 ## input 
