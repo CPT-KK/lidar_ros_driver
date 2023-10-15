@@ -35,7 +35,7 @@ catkin_package(
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(PCL REQUIRED QUIET)
-
+find_package(OpenCV REQUIRED)
 # include directories
 include_directories(
         ${catkin_INCLUDE_DIRS}
@@ -43,7 +43,7 @@ include_directories(
 include_directories(
 	include 
         ${EIGEN3_INCLUDE_DIR}
-        # ${OpenCV_INCLUDE_DIRS}
+        ${OpenCV_INCLUDE_DIRS}
         ${PCL_INCLUDE_DIRS}
         ${YAML_CPP_INCLUDE_DIR}
 )
@@ -59,6 +59,6 @@ link_directories(
 ## Build ##
 ###########
 # Range Image Projection
-add_executable(lidar_usv_det src/lidar_usv_det.cpp)
+add_executable(lidar_usv_det src/lidar_usv_det.cpp src/lshape_estimator.cpp)
 add_dependencies(lidar_usv_det ${catkin_EXPORTED_TARGETS})
-target_link_libraries(lidar_usv_det ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${EIGEN3_LIBS})
+target_link_libraries(lidar_usv_det ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${EIGEN3_LIBS} ${OpenCV_LIBS})
