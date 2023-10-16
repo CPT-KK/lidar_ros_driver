@@ -60,7 +60,7 @@
 
 using namespace std;
 
-ros::Publisher lidar_pub, targets_pub;
+ros::Publisher postPCPub, objectPub;
 ros::Subscriber imu_sub;
 double m_usv_length = 0.0;
 double m_usv_width = 0.0;
@@ -79,44 +79,7 @@ std::vector<pcl::PointIndices> clusterIndices;
 bool label_imu_sub = false;
 Eigen::Quaterniond imu_pose;
 
-void cloudCut(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float xLB, float xUB, float yLB, float yUB, float zLB, float zUB,  float iLB, float iUB) {
-    // 判断点云是否为空
-    if (cloud->size() == 0) {
-        return;
-    }
-    
-    // 定义裁剪对象
-    pcl::PassThrough<pcl::PointXYZI> pass;
-
-    // 剪裁点云
-    // x轴
-    pass.setInputCloud(cloud);
-    pass.setFilterFieldName("x");
-    pass.setFilterLimits(xLB, xUB);  // 裁剪保留区域
-    pass.filter(*cloud);
-
-    // y轴
-    pass.setInputCloud(cloud);
-    pass.setFilterFieldName("y");
-    pass.setFilterLimits(yLB, yUB);
-    pass.filter(*cloud);
-
-    // z轴
-    pass.setInputCloud(cloud);
-    pass.setFilterFieldName("z");
-    pass.setFilterLimits(zLB, zUB);
-    pass.filter(*cloud);
-
-    // 强度
-    pass.setInputCloud(cloud);
-    pass.setFilterFieldName("I");
-    pass.setFilterLimits(iLB, iUB);
-    pass.filter(*cloud);
-
-    return;
-}
-
-void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float divFilter) {
+inline void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float divFilter) {
 
     // 判断点云是否为空
     if (cloud->size() == 0) {
@@ -149,7 +112,7 @@ void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float divFilter) {
     return;
 }
 
-void clusterExt(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud) {
+inline void clusterExt(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud) {
     clusterIndices.clear();
 
     // 判断点云是否为空
@@ -174,7 +137,7 @@ void clusterExt(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud) {
     return;
 }
 
-void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float objVector[3], float& len, float& wid, float& lwRatio, float& cenX, float& cenY) {
+inline void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float objVector[3], float& len, float& wid, float& lwRatio, float& cenX, float& cenY) {
     // 判断点云是否为空
     if (cloud->size() == 0) {
         return;
@@ -280,16 +243,16 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     ROS_INFO("Removing outliers costs: %e s", (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
 
-    // Creating the KdTree object for the search method of the extraction
+    // Cluster extraction
     clusterExt(pc);
     ROS_INFO("Extract clusters: %e s", (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
 
-    // Prepare publish clusters
-    geometry_msgs::PoseArray targets;
-    targets.header.stamp = lidar0->header.stamp;
-    targets.header.frame_id = "USV_FLU";
-    targets.poses.reserve(clusterIndices.size());
+    // Cluster state estimation
+    geometry_msgs::PoseArray objects;
+    objects.header.stamp = lidar0->header.stamp;
+    objects.header.frame_id = "USV_FLU";
+    objects.poses.reserve(clusterIndices.size());
 #pragma omp parallel for num_threads(8)    
     for (std::vector<pcl::PointIndices>::const_iterator it = clusterIndices.begin(); it != clusterIndices.end(); ++it) {
         // 创建临时保存点云簇的点云
@@ -301,7 +264,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         }
 
         // 提取点云位姿
-        geometry_msgs::Pose target_pose;
+        geometry_msgs::Pose objPose;
         float objVector[3] = {0.0f, 0.0f, 0.0f};
         float len = 0.0f;
         float wid = 0.0f;
@@ -314,58 +277,30 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
             continue;
         }
 
-        target_pose.position.x = cenX;
-        target_pose.position.y = cenY;
+        objPose.position.x = cenX;
+        objPose.position.y = cenY;
         tf2::Quaternion quat;
         quat.setEuler(0, 0, std::atan(objVector[1]/objVector[0]));
 
-        target_pose.orientation.w = quat.w();
-        target_pose.orientation.x = quat.x();
-        target_pose.orientation.y = quat.y();
-        target_pose.orientation.z = quat.z();
-        targets.poses.push_back(target_pose);
+        objPose.orientation.w = quat.w();
+        objPose.orientation.x = quat.x();
+        objPose.orientation.y = quat.y();
+        objPose.orientation.z = quat.z();
+        objects.poses.push_back(objPose);
     }
-    targets_pub.publish(targets);
     ROS_INFO("Cluster state estimation finished in %e s", (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
-    
-    
-//     for (const auto& cluster : clusterIndices) {
-//         pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZI>);
-//         for (const auto& idx : cluster.indices) {
-//             cloud_cluster->push_back((*pc)[idx]);
-//         }
 
-        
-// #ifdef EST_HEADING  // Begin heading estimation
-        
-//         // Efficient L-shape fitting of laser scanner data for vehicle pose estimation
-//         // Remove the outlier
-//         orientation_calc orient_calc_("AREA");  // AREA
-//         double theta_optim;
-//         bool success_fitting = orient_calc_.LshapeFitting(*cloud_cluster, theta_optim);
+    // Publish object 
+    objectPub.publish(objects); 
 
-//         if (!success_fitting) {
-//             ROS_INFO("Fitting unsuccessful");
-//             continue;
-//         }
-
-//         calculateDimPos(*cloud_cluster, target_pose, theta_optim);
- 
-// #endif // End heading estimation
-
-//         targets.poses.push_back(target_pose);
-//     }
-//     targets_pub.publish(targets);
-
-    // Send processed pointcloud
-    sensor_msgs::PointCloud2 pc_pub;
-    pcl::toROSMsg(*pc, pc_pub);
-    pc_pub.header.stamp = lidar0->header.stamp;
-    pc_pub.header.frame_id = "USV_FLU";
-    lidar_pub.publish(pc_pub);
+    // Publish processed pointcloud
+    sensor_msgs::PointCloud2 postPC;
+    pcl::toROSMsg(*pc, postPC);
+    postPC.header.stamp = lidar0->header.stamp;
+    postPC.header.frame_id = "USV_FLU";
+    postPCPub.publish(postPC);
     pc->clear();
-
     ROS_INFO("Processed pointcloud published in %e s\n", (ros::Time::now() - t0).toSec());
 }
 
@@ -373,8 +308,8 @@ int main(int argc, char** argv) {
     ros::init(argc, argv, "lidar_usv_det");
     ros::NodeHandle nh("~");
 
-    lidar_pub = nh.advertise<sensor_msgs::PointCloud2>("/filter/lidar", 1);
-    targets_pub = nh.advertise<geometry_msgs::PoseArray>("/filter/target", 1);
+    postPCPub = nh.advertise<sensor_msgs::PointCloud2>("/filter/lidar", 1);
+    objectPub = nh.advertise<geometry_msgs::PoseArray>("/filter/target", 1);
 
     nh.param<double>("usv_length", m_usv_length, 3.0);
     nh.param<double>("usv_width", m_usv_width, 1.2);
