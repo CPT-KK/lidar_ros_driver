@@ -73,6 +73,7 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr lidar2PC;
 pcl::PointCloud<pcl::PointXYZI>::Ptr lidar3PC;
 pcl::PointCloud<pcl::PointXYZI>::Ptr lidarRawPC;
 pcl::PointCloud<pcl::PointXYZI>::Ptr pc;
+std::vector<pcl::PointIndices> clusterIndices;
 
 #ifdef USE_IMU
 bool label_imu_sub = false;
@@ -148,12 +149,12 @@ void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float divFilter) {
     return;
 }
 
-std::vector<pcl::PointIndices> clusterExt(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud) {
-    std::vector<pcl::PointIndices> clusterIndices;
+void clusterExt(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud) {
+    clusterIndices.clear();
 
     // 判断点云是否为空
     if (cloud->size() == 0) {
-        return clusterIndices;
+        return;
     }
     
     // 点云欧式聚类分割，基于 KdTree 对象作为搜索方法
@@ -170,7 +171,7 @@ std::vector<pcl::PointIndices> clusterExt(pcl::PointCloud<pcl::PointXYZI>::Ptr c
     // 聚类抽取结果保存在一个数组中，数组中每个元素代表抽取的一个组件点云的下标
     ecExtraction.extract(clusterIndices);
 
-    return clusterIndices;
+    return;
 }
 
 void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float objVector[3], float& len, float& wid, float& lwRatio, float& cenX, float& cenY) {
@@ -280,7 +281,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     t0 = ros::Time::now();
 
     // Creating the KdTree object for the search method of the extraction
-    std::vector<pcl::PointIndices> clusterIndices = clusterExt(pc);
+    clusterExt(pc);
     ROS_INFO("Extract clusters: %e s", (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
 
@@ -396,6 +397,7 @@ int main(int argc, char** argv) {
     lidar3PC->points.reserve(10000);
     lidarRawPC->points.reserve(30000);
     pc->points.reserve(30000);
+    clusterIndices.reserve(20);
 
     ros::Rate rate(10.0);
 
