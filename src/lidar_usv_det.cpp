@@ -44,7 +44,7 @@
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl/segmentation/extract_clusters.h>
-
+#include <pcl/filters/voxel_grid.h>
 // opencv
 #include "opencv2/opencv.hpp"
 
@@ -62,6 +62,8 @@ ros::Publisher lidar_pub, targets_pub;
 ros::Subscriber imu_sub;
 double m_usv_length = 0.0;
 double m_usv_width = 0.0;
+double m_usv_height = 0.0;
+double m_usv_downsample_factor = 0.0;
 int m_usv_intensity = 0;
 // 包含功能1：remove the usv body from the lidar pointscloud
 
@@ -69,7 +71,7 @@ int m_usv_intensity = 0;
 std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> pcs;
 
 pcl::PointCloud<pcl::PointXYZI>::Ptr pc;
-
+pcl::VoxelGrid<pcl::PointXYZI> downsampleFilter;
 
 
 #ifdef USE_IMU
@@ -168,7 +170,9 @@ void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, geometry_ms
 	// calc yaw
 	tf2::Quaternion quat;
 	quat.setEuler(/* roll */ 0, /* pitch */ 0, /* yaw */ std::atan2(e_1_star.y(), e_1_star.x()));
-	std::cout << "yaw: " << std::atan2(e_1_star.y(), e_1_star.x()) << std::endl;
+	std::cout << "yaw: " << std::atan2(e_1_star.y(), e_1_star.x()) * 180.0 / 3.14 << std::endl;
+	std::cout << "yaw: " << std::atan2(e_1_star.y(), e_1_star.x()) * 180.0 / 3.14 << std::endl;
+	std::cout << "yaw: " << std::atan2(e_1_star.y(), e_1_star.x()) * 180.0 / 3.14 << std::endl;
 
 	output.orientation.w = quat.w();
 	output.orientation.x = quat.x();
@@ -206,7 +210,12 @@ void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, geometry_ms
 void imuCallback(const sensor_msgs::Imu & msg)
 {
 	label_imu_sub = true;
+
 	imu_pose = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
+    Eigen::Vector3d eular0 = imu_pose.toRotationMatrix().eulerAngles(2, 1, 0);//ZYX
+    //q1 yaw = 0
+    auto q1_tf = tf::createQuaternionMsgFromRollPitchYaw(eular0[2], eular0[1], 0);
+    imu_pose = Eigen::Quaterniond(q1_tf.w, q1_tf.x, q1_tf.y, q1_tf.z);
 }
 #endif
 
@@ -217,7 +226,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 	timer.tic();
 
 	static int counter = 0;
-	std::cout << "Processing"  << counter ++ << std::endl;
+	std::cout << "Processing "  << counter ++ << std::endl;
 
 
 	// for (int i = 0; i < (int) lidar0->fields.size(); ++i) 
@@ -261,6 +270,8 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 			point_pcl.x = point.x();
 			point_pcl.y = point.y();
 			point_pcl.z = point.z();
+			if(point_pcl.z > m_usv_height)
+				continue;
 			#endif
 			pc->push_back(point_pcl);
 		}
@@ -272,6 +283,12 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 	// outlierRemovalFilter.setMeanK (10);
 	// outlierRemovalFilter.setStddevMulThresh (1.0);
 	// outlierRemovalFilter.filter (*pc);
+	
+	// downsample 
+	downsampleFilter.setInputCloud(pc);
+	downsampleFilter.filter(*pc);
+
+
 	pcl::RadiusOutlierRemoval<pcl::PointXYZI> outlierRemovalFilter;
 	outlierRemovalFilter.setInputCloud(pc);
 	outlierRemovalFilter.setRadiusSearch(4);
@@ -294,6 +311,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 	ec.setSearchMethod (tree);
 	ec.setInputCloud (pc);
 	ec.extract (cluster_indices);
+	std::cout << "cluster_indices " << timer.toc()<< std::endl; 
 
 	geometry_msgs::PoseArray targets;
 	targets.header.stamp = lidar0->header.stamp;
@@ -304,7 +322,6 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 		pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZI>);
 		for (const auto& idx : cluster.indices) {
 			cloud_cluster->push_back((*pc)[idx]);
-		
 		}
 
 		geometry_msgs::Pose target_pose;
@@ -329,6 +346,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 		#endif
 
 		targets.poses.push_back(target_pose);
+		std::cout << "cluster_indice      " << timer.toc()<< std::endl;
 	}
 	targets_pub.publish(targets);
 
@@ -362,15 +380,18 @@ int main(int argc, char **argv) {
 	
 	nh.param<double>("usv_length", m_usv_length, 3.0);
 	nh.param<double>("usv_width", m_usv_width, 1.2);
+	nh.param<double>("usv_height", m_usv_height, 5.0);
+	nh.param<double>("usv_downsample_factor", m_usv_downsample_factor, 5.0);
 	nh.param<int>("usv_intensity", m_usv_intensity, 20);
+	
 	std::cout << m_usv_intensity << "," << m_usv_length << "," << m_usv_width << std::endl; 
 	#ifdef USE_IMU
 	imu_sub = nh.subscribe("/mavros/imu/data", 1, imuCallback);
 	#endif
 
-	message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar0(nh, "/livox/lidar_192_168_147_231", 3);
-	message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar1(nh, "/livox/lidar_192_168_147_232", 3);
-	message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar2(nh, "/livox/lidar_192_168_147_233", 3);
+	message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar0(nh, "/livox/lidar_192_168_147_231", 1);
+	message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar1(nh, "/livox/lidar_192_168_147_232", 1);
+	message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar2(nh, "/livox/lidar_192_168_147_233", 1);
 
 	typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> MySyncPolicy;
 	message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(3), sub_lidar0, sub_lidar1, sub_lidar2);
@@ -381,6 +402,7 @@ int main(int argc, char **argv) {
 	pcs[1].reset(new pcl::PointCloud<pcl::PointXYZI>());
 	pcs[2].reset(new pcl::PointCloud<pcl::PointXYZI>());
 	pc.reset(new pcl::PointCloud<pcl::PointXYZI>());
+	downsampleFilter.setLeafSize(m_usv_downsample_factor, m_usv_downsample_factor, m_usv_downsample_factor);
 
 	ros::Rate rate(10.0);
 
