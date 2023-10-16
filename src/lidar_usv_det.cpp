@@ -55,11 +55,9 @@
 // local
 #include "lshape_estimator.hpp"
 
-#define USE_IMU
-// #define EST_HEADING
-
 using namespace std;
 
+// ROS 订阅与接收定义
 ros::Publisher postPCPub, objectPub;
 ros::Subscriber imuSub;
 float X_MIN = 0.0f;
@@ -81,9 +79,10 @@ float TARGET_VESSEL_LENGTH_MAX = 0.0f;
 float TARGET_VESSEL_WIDTH_MIN = 0.0f;
 float TARGET_VESSEL_WIDTH_MAX = 0.0f;
 
+// 处理计数器
 int counter = 0;
 
-// 包含功能1：remove the usv body from the lidar pointscloud
+// 点云定义
 pcl::PointCloud<pcl::PointXYZI>::Ptr lidar1PC(new pcl::PointCloud<pcl::PointXYZI>);
 pcl::PointCloud<pcl::PointXYZI>::Ptr lidar2PC(new pcl::PointCloud<pcl::PointXYZI>);
 pcl::PointCloud<pcl::PointXYZI>::Ptr lidar3PC(new pcl::PointCloud<pcl::PointXYZI>);
@@ -91,9 +90,9 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr lidarRawPC(new pcl::PointCloud<pcl::PointXY
 pcl::PointCloud<pcl::PointXYZI>::Ptr pc(new pcl::PointCloud<pcl::PointXYZI>);
 std::vector<pcl::PointIndices> clusterIndices;
 
-#ifdef USE_IMU
-bool label_imu_sub = false;
-Eigen::Quaterniond imu_pose;
+// IMU 定义
+bool isIMUSub = false;
+Eigen::Quaterniond imuPose;
 
 inline void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float divFilter) {
 
@@ -190,16 +189,13 @@ inline void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float o
     cenX = mass_center[0];
     cenY = mass_center[1];
 
-    // printf("Center: [%.2f, %.2f, %.2f] | Direction: [%.2f, %.2f, %.2f]\n", mass_center[0], mass_center[1], mass_center[2], major_vector[0], major_vector[1], major_vector[2]);
-
     return;
 }
 
 void imuCallback(const sensor_msgs::Imu& msg) {
-    label_imu_sub = true;
-    imu_pose = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
+    isIMUSub = true;
+    imuPose = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
 }
-#endif
 
 void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const sensor_msgs::PointCloud2::ConstPtr& lidar1, const sensor_msgs::PointCloud2::ConstPtr& lidar2) {
     // Record init time
@@ -211,7 +207,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     pcl::fromROSMsg(*lidar1, *lidar2PC);
     pcl::fromROSMsg(*lidar2, *lidar3PC);
     *lidarRawPC = *lidar1PC + *lidar2PC + *lidar3PC;
-    ROS_INFO("Raw pointcloud: %d", static_cast<int>(lidarRawPC->size())); 
+    ROS_INFO("Point number in raw pointcloud: %d", static_cast<int>(lidarRawPC->size())); 
     ROS_INFO("Processed from msgs: %e s", (ros::Time::now() - t0).toSec()); 
     t0 = ros::Time::now();
 
@@ -242,7 +238,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         // 现在的点应该是 OK 的
         lidarRawPC->points[i].z = 0.0f;
         Eigen::Vector3d thisPoint(lidarRawPC->points[i].x, lidarRawPC->points[i].y, lidarRawPC->points[i].z);
-        // thisPoint = imu_pose * thisPoint;
+        // thisPoint = imuPose * thisPoint;
 
         pcl::PointXYZI point_pcl = lidarRawPC->points[i];
         point_pcl.x = thisPoint[0];
@@ -250,19 +246,19 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         point_pcl.z = thisPoint[2];
         pc->push_back(point_pcl);
     }
-    ROS_INFO("Boxed pointcloud: %d", static_cast<int>(pc->size()));
+    ROS_INFO("Point number in boxed pointcloud: %d", static_cast<int>(pc->size()));
     ROS_INFO("Box filter costs: %e s", (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
 
     // Outlier filters
     cloudFilter(pc, 0.1f);
-    ROS_INFO("Outlier removed pointcloud: %d", static_cast<int>(pc->size()));
+    ROS_INFO("Point number in outlier-removed pointcloud: %d", static_cast<int>(pc->size()));
     ROS_INFO("Removing outliers costs: %e s", (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
 
     // Cluster extraction
     clusterExt(pc);
-    ROS_INFO("Extract %d clusters, cost %e s", static_cast<int>(clusterIndices.size()), (ros::Time::now() - t0).toSec());
+    ROS_INFO("Extract %d cluster(s), cost %e s", static_cast<int>(clusterIndices.size()), (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
 
     // Cluster state estimation
@@ -318,7 +314,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     postPC.header.frame_id = "base_link";
     postPCPub.publish(postPC);
     pc->clear();
-    ROS_INFO("Processed pointcloud published in %e s\n", (ros::Time::now() - t0).toSec());
+    ROS_INFO("Post-pointcloud published in %e s\n", (ros::Time::now() - t0).toSec());
 }
 
 int main(int argc, char** argv) {
