@@ -376,6 +376,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         }
 
         // 现在的点应该是 OK 的
+        lidarRawPC->points[i].z = 0.0f;
         Eigen::Vector3d thisPoint(lidarRawPC->points[i].x, lidarRawPC->points[i].y, lidarRawPC->points[i].z);
         thisPoint = imu_pose * thisPoint;
 
