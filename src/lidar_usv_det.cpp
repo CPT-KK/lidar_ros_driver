@@ -5,28 +5,30 @@
 @brief: detect the usv via lidar sensor
 ***************************************************************************************************************************/
 // ROS
-#include <geometry_msgs/PoseArray.h>
+#include <ros/ros.h>
+
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/time_synchronizer.h>
+
+#include <std_msgs/String.h>
+#include <std_msgs/Float32MultiArray.h>
+#include <std_msgs/Int32MultiArray.h>
+#include <geometry_msgs/PoseArray.h>
 #include <nav_msgs/Odometry.h>
-#include <pcl_conversions/pcl_conversions.h>
-#include <ros/ros.h>
+
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <std_msgs/String.h>
+
 #include <tf/LinearMath/Quaternion.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_listener.h>
 
-#include <Eigen/Core>
-
-#include "std_msgs/Float32MultiArray.h"
-#include "std_msgs/Int32MultiArray.h"
-
 // Eigen 几何模块
+#include <Eigen/Core>
 #include <Eigen/Geometry>
+
 // pcl
 #include <pcl/common/common.h>
 #include <pcl/common/transforms.h>
@@ -34,20 +36,19 @@
 #include <pcl/filters/radius_outlier_removal.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/voxel_grid.h>
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <pcl/range_image/range_image.h>
-
-// clustering
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/features/moment_of_inertia_estimation.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/range_image/range_image.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/segmentation/sac_segmentation.h>
-#include <pcl/features/moment_of_inertia_estimation.h>
+#include <pcl_conversions/pcl_conversions.h>
 
 // opencv
 #include "opencv2/opencv.hpp"
@@ -201,18 +202,27 @@ void imuCallback(const sensor_msgs::Imu& msg) {
 void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const sensor_msgs::PointCloud2::ConstPtr& lidar1, const sensor_msgs::PointCloud2::ConstPtr& lidar2) {
     // Record init time
     ros::Time t0 = ros::Time::now();
-    ROS_INFO("Processing No.%d", counter++);
+    int rawPointNum = 0;
+    int boxedPointNum = 0;
+    int inlierPointNum = 0;
+    float mergeCostSecs = 0.0f;
+    float boxedCostSecs = 0.0f;
+    float removeOutlierCostSecs = 0.0f;
+    float clusterCostSecs = 0.0f;
+    float stateEstCostSecs = 0.0f;
+    
 
     // Merge 3 pointclouds
+    t0 = ros::Time::now();
     pcl::fromROSMsg(*lidar0, *lidar1PC);
     pcl::fromROSMsg(*lidar1, *lidar2PC);
     pcl::fromROSMsg(*lidar2, *lidar3PC);
     *lidarRawPC = *lidar1PC + *lidar2PC + *lidar3PC;
-    ROS_INFO("Point number in raw pointcloud: %d", static_cast<int>(lidarRawPC->size())); 
-    ROS_INFO("Processed from msgs: %e s", (ros::Time::now() - t0).toSec()); 
-    t0 = ros::Time::now();
-
+    rawPointNum = lidarRawPC->size();
+    mergeCostSecs = (ros::Time::now() - t0).toSec();
+    
     // Cut filter
+    t0 = ros::Time::now();
 #pragma omp parallel for num_threads(8)
     for (size_t i = 0; i < lidarRawPC->size(); i++) {
         // Intensity
@@ -247,22 +257,22 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         point_pcl.z = thisPoint[2];
         pc->push_back(point_pcl);
     }
-    ROS_INFO("Point number in boxed pointcloud: %d", static_cast<int>(pc->size()));
-    ROS_INFO("Box filter costs: %e s", (ros::Time::now() - t0).toSec());
-    t0 = ros::Time::now();
-
+    boxedPointNum = pc->size();
+    boxedCostSecs = (ros::Time::now() - t0).toSec();
+    
     // Outlier filters
-    cloudFilter(pc, 0.1f);
-    ROS_INFO("Point number in outlier-removed pointcloud: %d", static_cast<int>(pc->size()));
-    ROS_INFO("Removing outliers costs: %e s", (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
+    cloudFilter(pc, 0.1f);
+    inlierPointNum = pc->size();
+    removeOutlierCostSecs = (ros::Time::now() - t0).toSec();
 
     // Cluster extraction
-    clusterExt(pc);
-    ROS_INFO("Extract %d cluster(s), cost %e s", static_cast<int>(clusterIndices.size()), (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
+    clusterExt(pc);
+    clusterCostSecs = (ros::Time::now() - t0).toSec();
 
     // Cluster state estimation
+    t0 = ros::Time::now();
     geometry_msgs::PoseArray objects;
     objects.header.stamp = ros::Time::now();
     objects.header.frame_id = "base_link";
@@ -302,8 +312,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         objPose.orientation.z = quat.z();
         objects.poses.push_back(objPose);
     }
-    ROS_INFO("Cluster state estimation finished in %e s", (ros::Time::now() - t0).toSec());
-    t0 = ros::Time::now();
+    stateEstCostSecs = (ros::Time::now() - t0).toSec();
 
     // Publish object 
     objectPub.publish(objects); 
@@ -311,11 +320,23 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     // Publish processed pointcloud
     sensor_msgs::PointCloud2 postPC;
     pcl::toROSMsg(*pc, postPC);
-    postPC.header.stamp = lidar0->header.stamp;
+    postPC.header.stamp = ros::Time::now();
     postPC.header.frame_id = "base_link";
     postPCPub.publish(postPC);
     pc->clear();
-    ROS_INFO("Post-pointcloud published in %e s\n", (ros::Time::now() - t0).toSec());
+
+    // Print debug info
+    ROS_INFO("========= No. %d =========", counter++);
+    ROS_INFO("Point number in raw pointcloud: %d", rawPointNum);
+    ROS_INFO("Point number in boxed pointcloud: %d", boxedPointNum); 
+    ROS_INFO("Point number in outlier-removed pointcloud: %d", inlierPointNum);
+    ROS_INFO("Cluster number: %d", static_cast<int>(clusterIndices.size()));
+    ROS_INFO("Merge all point clouds costs: %e s", mergeCostSecs); 
+    ROS_INFO("Box filter costs: %e s", boxedCostSecs);
+    ROS_INFO("Removing outliers costs: %e s", removeOutlierCostSecs);
+    ROS_INFO("Cluster extraction costs: %e s", clusterCostSecs);
+    ROS_INFO("State estimation finished costs: %e s\n", stateEstCostSecs);
+
 }
 
 int main(int argc, char** argv) {
@@ -337,13 +358,13 @@ int main(int argc, char** argv) {
     nh.param<float>("outlier_static_tol", OUTLIER_STATIC_TOL, 1.0f);
     nh.param<int>("cluster_size_min", CLUSTER_SIZE_MIN, 30);
     nh.param<int>("cluster_size_max", CLUSTER_SIZE_MAX, 10000);
-    nh.param<float>("cluster_tol", CLUSTER_TOL, 20);
+    nh.param<float>("cluster_tol", CLUSTER_TOL, 3.0f);
     nh.param<float>("target_vessel_length_min", TARGET_VESSEL_LENGTH_MIN, 1.0f);
     nh.param<float>("target_vessel_length_max", TARGET_VESSEL_LENGTH_MAX, 25.0f);
     nh.param<float>("target_vessel_width_min", TARGET_VESSEL_WIDTH_MIN, 0.25f);
     nh.param<float>("target_vessel_width_max", TARGET_VESSEL_WIDTH_MAX, 8.0f);
 
-    ROS_INFO("Params: Intensity: %.2f | X box filter: %.2f | Y box filter: %.2f", USV_INTENSITY_MIN, USV_LENGTH, USV_WIDTH);
+    ROS_INFO("USV Lidar data process ros program.");
 
     // 定义发送
     postPCPub = nh.advertise<sensor_msgs::PointCloud2>("/filter/lidar", 1);
@@ -353,13 +374,13 @@ int main(int argc, char** argv) {
     imuSub = nh.subscribe("/mavros/imu/data", 1, imuCallback);
 
     // 定义时间同步订阅
-    message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar0(nh, "/livox/lidar_192_168_147_231", 3);
-    message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar1(nh, "/livox/lidar_192_168_147_232", 3);
-    message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar2(nh, "/livox/lidar_192_168_147_233", 3);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_231", 3);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar1(nh, "/livox/lidar_192_168_147_232", 3);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar2(nh, "/livox/lidar_192_168_147_233", 3);
 
     // 使用 ApproximateTime 策略定义同步器
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> MySyncPolicy;
-    message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(3), sub_lidar0, sub_lidar1, sub_lidar2);
+    message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(3), subLidar0, subLidar1, subLidar2);
     
     // 注册回调函数，当消息时间接近并准备同步时，该函数会被调用
     sync.registerCallback(boost::bind(&lidarcallback, _1, _2, _3));
