@@ -66,10 +66,12 @@ double m_usv_length = 0.0;
 double m_usv_width = 0.0;
 int m_usv_intensity = 0;
 int counter = 0;
+
 // 包含功能1：remove the usv body from the lidar pointscloud
-
-std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> pcs;
-
+pcl::PointCloud<pcl::PointXYZI>::Ptr lidar1PC;
+pcl::PointCloud<pcl::PointXYZI>::Ptr lidar2PC;
+pcl::PointCloud<pcl::PointXYZI>::Ptr lidar3PC;
+pcl::PointCloud<pcl::PointXYZI>::Ptr lidarRawPC;
 pcl::PointCloud<pcl::PointXYZI>::Ptr pc;
 
 #ifdef USE_IMU
@@ -192,35 +194,39 @@ void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, geometry_ms
     // output.orientation.y = std::max(output.orientation.y, ep);
 }
 
-void cloudCut(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float xLB, float xUB, float yLB, float yUB, float zLB, float zUB) {
+void cloudCut(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float xLB, float xUB, float yLB, float yUB, float zLB, float zUB,  float iLB, float iUB) {
     // 判断点云是否为空
     if (cloud->size() == 0) {
         return;
     }
     
     // 定义裁剪对象
-    pcl::PassThrough<pcl::PointXYZI> passX;
-    pcl::PassThrough<pcl::PointXYZI> passY;
-    pcl::PassThrough<pcl::PointXYZI> passZ;
+    pcl::PassThrough<pcl::PointXYZI> pass;
 
     // 剪裁点云
     // x轴
-    passX.setInputCloud(cloud);
-    passX.setFilterFieldName("x");
-    passX.setFilterLimits(xLB, xUB);  // 裁剪保留区域
-    passX.filter(*cloud);
+    pass.setInputCloud(cloud);
+    pass.setFilterFieldName("x");
+    pass.setFilterLimits(xLB, xUB);  // 裁剪保留区域
+    pass.filter(*cloud);
 
     // y轴
-    passY.setInputCloud(cloud);
-    passY.setFilterFieldName("y");
-    passY.setFilterLimits(yLB, yUB);
-    passY.filter(*cloud);
+    pass.setInputCloud(cloud);
+    pass.setFilterFieldName("y");
+    pass.setFilterLimits(yLB, yUB);
+    pass.filter(*cloud);
 
     // z轴
-    passZ.setInputCloud(cloud);
-    passZ.setFilterFieldName("z");
-    passZ.setFilterLimits(zLB, zUB);
-    passZ.filter(*cloud);
+    pass.setInputCloud(cloud);
+    pass.setFilterFieldName("z");
+    pass.setFilterLimits(zLB, zUB);
+    pass.filter(*cloud);
+
+    // 强度
+    pass.setInputCloud(cloud);
+    pass.setFilterFieldName("I");
+    pass.setFilterLimits(iLB, iUB);
+    pass.filter(*cloud);
 
     return;
 }
@@ -336,54 +342,56 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     ros::Time t0 = ros::Time::now();
     ROS_INFO("Processing No.%d", counter++);
 
-
     // Merge 3 pointclouds
-    pcl::fromROSMsg(*lidar0, *pcs[0]);
-    pcl::fromROSMsg(*lidar1, *pcs[1]);
-    pcl::fromROSMsg(*lidar2, *pcs[2]);
+    pcl::fromROSMsg(*lidar0, *lidar1PC);
+    pcl::fromROSMsg(*lidar1, *lidar2PC);
+    pcl::fromROSMsg(*lidar2, *lidar3PC);
+    *lidarRawPC = *lidar1PC + *lidar2PC + *lidar3PC;
+
     ROS_INFO("Processed from msgs: %e s", (ros::Time::now() - t0).toSec()); 
     t0 = ros::Time::now();
 
-    pc->reserve(pcs[0]->size() + pcs[1]->size() + pcs[2]->size());
-
     // Cut filter
 #pragma omp parallel for num_threads(8)
-    for (std::size_t i = 0; i < pcs.size(); i++) {
-        for (std::size_t j = 0; j < pcs[i]->size(); j++) {
-            if (pcs[i]->points[j].intensity < m_usv_intensity){
-                continue;
-            }
-            
-            if (pcs[i]->points[j].x > -m_usv_length && pcs[i]->points[j].x < m_usv_length && pcs[i]->points[j].y > -m_usv_width && pcs[i]->points[j].y < m_usv_width) {
-                continue;
-            }
-
-            if (pcs[i]->points[j].z > 5.0f || pcs[i]->points[j].z < -2.0f) {
-                continue;
-            }
-
-            if (abs(pcs[i]->points[j].x) > 120.0f || abs(pcs[i]->points[j].y) > 120.0f) {
-                continue;
-            }
-
-            pcl::PointXYZI point_pcl = pcs[i]->points[j];
-
-#ifdef USE_IMU
-            Eigen::Vector3d thisPoint(pcs[i]->points[j].x, pcs[i]->points[j].y, pcs[i]->points[j].z);
-            thisPoint = imu_pose * thisPoint;
-            point_pcl.x = thisPoint[0];
-            point_pcl.y = thisPoint[1];
-            point_pcl.z = thisPoint[2];
-#endif
-            pc->push_back(point_pcl);
+    for (size_t i = 0; i < lidarRawPC->size(); i++) {
+        // Intensity
+        if(lidarRawPC->points[i].intensity < 10.0f) {
+            continue;
         }
+
+        // Outer box filter
+        if (lidarRawPC->points[i].x < -200.0f || lidarRawPC->points[i].x > 200.0f) {
+            continue;
+        }
+        if (lidarRawPC->points[i].y < -70.0f || lidarRawPC->points[i].y > 70.0f) {
+            continue;
+        }
+        if (lidarRawPC->points[i].z < -1.5f || lidarRawPC->points[i].z > 5.0f) {
+            continue;
+        }
+
+        // USV filter
+        if (lidarRawPC->points[i].x < 3.6f && lidarRawPC->points[i].x > -3.6f && lidarRawPC->points[i].y < 1.25f && lidarRawPC->points[i].x > -1.25f) {
+            continue;
+        }
+
+        // 现在的点应该是 OK 的
+        Eigen::Vector3d thisPoint(lidarRawPC->points[i].x, lidarRawPC->points[i].y, lidarRawPC->points[i].z);
+        thisPoint = imu_pose * thisPoint;
+
+        pcl::PointXYZI point_pcl = lidarRawPC->points[i];
+        point_pcl.x = thisPoint[0];
+        point_pcl.y = thisPoint[1];
+        point_pcl.z = thisPoint[2];
+        pc->push_back(point_pcl);
     }
-    ROS_INFO("Processed box filter: %e s", (ros::Time::now() - t0).toSec());
+
+    ROS_INFO("Box filter costs: %e s", (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
 
     // Outlier filters
     cloudFilter(pc, 0.1f);
-    ROS_INFO("Remove outliers: %e s", (ros::Time::now() - t0).toSec());
+    ROS_INFO("Removing outliers costs: %e s", (ros::Time::now() - t0).toSec());
     t0 = ros::Time::now();
 
     // Creating the KdTree object for the search method of the extraction
@@ -414,9 +422,11 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         float lwRatio = 0.0f;
         float cenX = 0.0f;
         float cenY = 0.0f;
-        float cenENUX = 0.0f;
-        float cenENUY = 0.0f;
         clusterDirection(cloudCluster, objVector, len, wid, lwRatio, cenX, cenY);
+
+        if (len > 30.0f || wid > 10.0f) {
+            continue;
+        }
 
         target_pose.position.x = cenX;
         target_pose.position.y = cenY;
@@ -427,12 +437,6 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         target_pose.orientation.x = quat.x();
         target_pose.orientation.y = quat.y();
         target_pose.orientation.z = quat.z();
-
-        // double theta_optim = 0.0;
-        // orientation_calc orient_calc_("AREA");  // AREA
-        // bool success_fitting = orient_calc_.LshapeFitting(*cloudCluster, theta_optim);
-        // calculateDimPos(*cloudCluster, target_pose, theta_optim);
-
         targets.poses.push_back(target_pose);
     }
     targets_pub.publish(targets);
@@ -491,9 +495,7 @@ int main(int argc, char** argv) {
     nh.param<int>("usv_intensity", m_usv_intensity, 20);
     ROS_INFO("Params: Intensity: %d | X box filter: %.2f | Y box filter: %.2f", m_usv_intensity, m_usv_length, m_usv_width);
 
-#ifdef USE_IMU
     imu_sub = nh.subscribe("/mavros/imu/data", 1, imuCallback);
-#endif
 
     message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar0(nh, "/livox/lidar_192_168_147_231", 3);
     message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar1(nh, "/livox/lidar_192_168_147_232", 3);
@@ -503,11 +505,12 @@ int main(int argc, char** argv) {
     message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(3), sub_lidar0, sub_lidar1, sub_lidar2);
     sync.registerCallback(boost::bind(&lidarcallback, _1, _2, _3));
 
-    pcs.resize(3);
-    pcs[0].reset(new pcl::PointCloud<pcl::PointXYZI>());
-    pcs[1].reset(new pcl::PointCloud<pcl::PointXYZI>());
-    pcs[2].reset(new pcl::PointCloud<pcl::PointXYZI>());
-    pc.reset(new pcl::PointCloud<pcl::PointXYZI>());
+    // 预分配内存
+    lidar1PC->points.reserve(10000);
+    lidar2PC->points.reserve(10000);
+    lidar3PC->points.reserve(10000);
+    lidarRawPC->points.reserve(30000);
+    pc->points.reserve(30000);
 
     ros::Rate rate(10.0);
 
