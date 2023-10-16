@@ -94,6 +94,7 @@ std::vector<pcl::PointIndices> clusterIndices;
 bool isIMUSub = false;
 Eigen::Quaterniond imuPose;
 
+// 点云过滤离群点，叶素滤波
 inline void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float divFilter) {
 
     // 判断点云是否为空
