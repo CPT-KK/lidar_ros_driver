@@ -290,7 +290,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         float cenY = 0.0f;
         clusterDirection(cloudCluster, objVector, len, wid, lwRatio, cenX, cenY);
 
-        if (len > TARGET_VESSEL_LENGTH_MAX || wid > TARGET_VESSEL_WIDTH_MAX) {
+        if (len > TARGET_VESSEL_LENGTH_MAX || wid > TARGET_VESSEL_WIDTH_MAX || len < TARGET_VESSEL_LENGTH_MIN || wid < TARGET_VESSEL_WIDTH_MIN) {
             continue;
         }
 
@@ -337,13 +337,13 @@ int main(int argc, char** argv) {
     nh.param<float>("usv_width", USV_WIDTH, 1.25f);
     nh.param<float>("usv_intensity", USV_INTENSITY_MIN, 20);
     nh.param<int>("outlier_static_check_point", OUTLIER_STATIC_CHECK_POINT, 50);
-    nh.param<float>("outlier_static_tol", OUTLIER_STATIC_TOL, 1.5f);
-    nh.param<int>("cluster_size_min", CLUSTER_SIZE_MIN, 50);
+    nh.param<float>("outlier_static_tol", OUTLIER_STATIC_TOL, 1.0f);
+    nh.param<int>("cluster_size_min", CLUSTER_SIZE_MIN, 30);
     nh.param<int>("cluster_size_max", CLUSTER_SIZE_MAX, 10000);
     nh.param<float>("cluster_tol", CLUSTER_TOL, 20);
-    nh.param<float>("target_vessel_length_min", TARGET_VESSEL_LENGTH_MIN, 1.5f);
+    nh.param<float>("target_vessel_length_min", TARGET_VESSEL_LENGTH_MIN, 1.0f);
     nh.param<float>("target_vessel_length_max", TARGET_VESSEL_LENGTH_MAX, 25.0f);
-    nh.param<float>("target_vessel_width_min", TARGET_VESSEL_WIDTH_MIN, 0.5f);
+    nh.param<float>("target_vessel_width_min", TARGET_VESSEL_WIDTH_MIN, 0.25f);
     nh.param<float>("target_vessel_width_max", TARGET_VESSEL_WIDTH_MAX, 8.0f);
 
     ROS_INFO("Params: Intensity: %.2f | X box filter: %.2f | Y box filter: %.2f", USV_INTENSITY_MIN, USV_LENGTH, USV_WIDTH);
@@ -356,9 +356,9 @@ int main(int argc, char** argv) {
     imuSub = nh.subscribe("/mavros/imu/data", 1, imuCallback);
 
     // 定义时间同步订阅
-    message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar0(nh, "/livox/lidar_192_168_147_231", 5);
-    message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar1(nh, "/livox/lidar_192_168_147_232", 5);
-    message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar2(nh, "/livox/lidar_192_168_147_233", 5);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar0(nh, "/livox/lidar_192_168_147_231", 3);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar1(nh, "/livox/lidar_192_168_147_232", 3);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> sub_lidar2(nh, "/livox/lidar_192_168_147_233", 3);
 
     // 使用 ApproximateTime 策略定义同步器
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> MySyncPolicy;
@@ -368,11 +368,11 @@ int main(int argc, char** argv) {
     sync.registerCallback(boost::bind(&lidarcallback, _1, _2, _3));
 
     // 预分配内存
-    lidar1PC->points.reserve(50000);
+    lidar1PC->points.reserve(100000);
     lidar2PC->points.reserve(50000);
     lidar3PC->points.reserve(50000);
-    lidarRawPC->points.reserve(150000);
-    pc->points.reserve(150000);
+    lidarRawPC->points.reserve(200000);
+    pc->points.reserve(200000);
     clusterIndices.reserve(20);
 
     while (ros::ok()) {

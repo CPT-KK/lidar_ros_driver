@@ -17,9 +17,9 @@
     <param name="cluster_size_min" type="int" value="30" />
     <param name="cluster_size_max" type="int" value="10000" />
     <param name="cluster_tol" type="double" value="3.0" />
-    <param name="target_vessel_length_min" type="double" value="1.5" />
+    <param name="target_vessel_length_min" type="double" value="1.0" />
     <param name="target_vessel_length_max" type="double" value="25.0" />
-    <param name="target_vessel_width_min" type="double" value="0.5" />
+    <param name="target_vessel_width_min" type="double" value="0.25" />
     <param name="target_vessel_width_max" type="double" value="8.0" />
   </node>
   <!-- <node pkg="rosbag" type="record" name="usv_lidar_rosbag" output="screen" args="/livox/lidar_192_168_147_231 /livox/lidar_192_168_147_232 /livox/lidar_192_168_147_233 -O /home/$(env USER)/usv_lidar.bag" /> -->
