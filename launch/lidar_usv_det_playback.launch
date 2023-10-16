@@ -3,9 +3,9 @@
   <node pkg="tf" type="static_transform_publisher" name="flu_to_map" args="0 0 0 0 0 0 1 USV_FLU map  10" /> 
   <rosparam file="$(find lidar_usv_det)/config/lidar_usv_det.yaml" command="load" />
   <node pkg="lidar_usv_det" type="lidar_usv_det" name="lidar_usv_det" output="screen">
-    <param name="usv_length" type="double" value="3.6" />
-    <param name="usv_width" type="double" value="1.5" />
-    <param name="usv_intensity" type="int" value="10" />
+    <param name="usv_length" type="float" value="3.6" />
+    <param name="usv_width" type="float" value="1.5" />
+    <param name="usv_intensity" type="float" value="10" />
   </node>
 
   
