@@ -169,7 +169,7 @@ void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, geometry_ms
 
 	// calc yaw
 	tf2::Quaternion quat;
-	quat.setEuler(/* roll */ 0, /* pitch */ 0, /* yaw */ std::atan2(e_1_star.y(), e_1_star.x()));
+	quat.setEuler(/* roll */ 0, /* pitch */ 0, /* yaw */ std::atan(e_1_star.y()/e_1_star.x()));
 	std::cout << "yaw: " << std::atan2(e_1_star.y(), e_1_star.x()) * 180.0 / 3.14 << std::endl;
 	std::cout << "yaw: " << std::atan2(e_1_star.y(), e_1_star.x()) * 180.0 / 3.14 << std::endl;
 	std::cout << "yaw: " << std::atan2(e_1_star.y(), e_1_star.x()) * 180.0 / 3.14 << std::endl;
@@ -212,10 +212,10 @@ void imuCallback(const sensor_msgs::Imu & msg)
 	label_imu_sub = true;
 
 	imu_pose = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
-    Eigen::Vector3d eular0 = imu_pose.toRotationMatrix().eulerAngles(2, 1, 0);//ZYX
-    //q1 yaw = 0
-    auto q1_tf = tf::createQuaternionMsgFromRollPitchYaw(eular0[2], eular0[1], 0);
-    imu_pose = Eigen::Quaterniond(q1_tf.w, q1_tf.x, q1_tf.y, q1_tf.z);
+    // Eigen::Vector3d eular0 = imu_pose.toRotationMatrix().eulerAngles(2, 1, 0);//ZYX
+    // //q1 yaw = 0
+    // auto q1_tf = tf::createQuaternionMsgFromRollPitchYaw(eular0[2], eular0[1], 0);
+    // imu_pose = Eigen::Quaterniond(q1_tf.w, q1_tf.x, q1_tf.y, q1_tf.z);
 }
 #endif
 
@@ -270,7 +270,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 			point_pcl.x = point.x();
 			point_pcl.y = point.y();
 			point_pcl.z = point.z();
-			if(point_pcl.z > m_usv_height)
+			if(abs(point_pcl.z) > m_usv_height)
 				continue;
 			#endif
 			pc->push_back(point_pcl);
@@ -295,9 +295,6 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 	outlierRemovalFilter.setMinNeighborsInRadius (6);
 	outlierRemovalFilter.filter (*pc);
 	std::cout << "OutlierRemoval filter " << timer.toc()<< std::endl; 
-
-
-
 
 
 	// Creating the KdTree object for the search method of the extraction
@@ -380,7 +377,7 @@ int main(int argc, char **argv) {
 	
 	nh.param<double>("usv_length", m_usv_length, 3.0);
 	nh.param<double>("usv_width", m_usv_width, 1.2);
-	nh.param<double>("usv_height", m_usv_height, 5.0);
+	nh.param<double>("usv_height", m_usv_height, 4.0);
 	nh.param<double>("usv_downsample_factor", m_usv_downsample_factor, 5.0);
 	nh.param<int>("usv_intensity", m_usv_intensity, 20);
 	
