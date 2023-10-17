@@ -211,7 +211,6 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     float clusterCostSecs = 0.0f;
     float stateEstCostSecs = 0.0f;
     
-
     // Merge 3 pointclouds
     t0 = ros::Time::now();
     pcl::fromROSMsg(*lidar0, *lidar1PC);
@@ -249,7 +248,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         // 现在的点应该是 OK 的
         lidarRawPC->points[i].z = 0.0f;
         Eigen::Vector3d thisPoint(lidarRawPC->points[i].x, lidarRawPC->points[i].y, lidarRawPC->points[i].z);
-        // thisPoint = imuPose * thisPoint;
+        thisPoint = imuPose * thisPoint;
 
         pcl::PointXYZI point_pcl = lidarRawPC->points[i];
         point_pcl.x = thisPoint[0];
@@ -275,7 +274,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     t0 = ros::Time::now();
     geometry_msgs::PoseArray objects;
     objects.header.stamp = ros::Time::now();
-    objects.header.frame_id = "base_link";
+    objects.header.frame_id = "map";
     objects.poses.reserve(clusterIndices.size());
 #pragma omp parallel for num_threads(8)    
     for (std::vector<pcl::PointIndices>::const_iterator it = clusterIndices.begin(); it != clusterIndices.end(); ++it) {
@@ -321,7 +320,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     sensor_msgs::PointCloud2 postPC;
     pcl::toROSMsg(*pc, postPC);
     postPC.header.stamp = ros::Time::now();
-    postPC.header.frame_id = "base_link";
+    postPC.header.frame_id = "map";
     postPCPub.publish(postPC);
     pc->clear();
 
