@@ -4,6 +4,11 @@
 @date:2021.12
 @brief: detect the usv via lidar sensor
 ***************************************************************************************************************************/
+// C base
+#include <iostream>
+#include <vector>
+#include <math.h>
+
 // ROS
 #include <ros/ros.h>
 
@@ -71,10 +76,11 @@ float USV_LENGTH = 0.0f;
 float USV_WIDTH = 0.0f;
 float USV_INTENSITY_MIN = 0.0f;
 int OUTLIER_STATIC_CHECK_POINT = 0;
-float OUTLIER_STATIC_TOL = 0;
+float OUTLIER_STATIC_TOL = 0.0f;
+float VOXEL_GRID_DOWNSAMPLE_FACTOR = 0.0f;
 int CLUSTER_SIZE_MIN = 0;
 int CLUSTER_SIZE_MAX = 0;
-float CLUSTER_TOL = 0;
+float CLUSTER_TOL = 0.0f;
 float TARGET_VESSEL_LENGTH_MIN = 0.0f;
 float TARGET_VESSEL_LENGTH_MAX = 0.0f;
 float TARGET_VESSEL_WIDTH_MIN = 0.0f;
@@ -91,62 +97,52 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr lidarRawPC(new pcl::PointCloud<pcl::PointXY
 pcl::PointCloud<pcl::PointXYZI>::Ptr pc(new pcl::PointCloud<pcl::PointXYZI>);
 std::vector<pcl::PointIndices> clusterIndices;
 
+// 创建离群点滤波器对象
+pcl::StatisticalOutlierRemoval<pcl::PointXYZI> sor;
+
+// 定义 VoxelGrid 滤波器变量
+pcl::VoxelGrid<pcl::PointXYZI> voxGrid;
+
+// 点云欧式聚类分割，基于 KdTree 对象作为搜索方法
+pcl::search::KdTree<pcl::PointXYZI>::Ptr kdTree(new pcl::search::KdTree<pcl::PointXYZI>);
+pcl::EuclideanClusterExtraction<pcl::PointXYZI> ecExtraction;
+
 // IMU 定义
 bool isIMUSub = false;
 Eigen::Quaterniond imuPose;
 
 // 点云过滤离群点，叶素滤波
-inline void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float divFilter) {
+inline void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudPtr) {
 
     // 判断点云是否为空
-    if (cloud->size() == 0) {
+    if (cloudPtr->size() == 0) {
         return;
     }
-    
-    // 创建离群点滤波器对象
-    pcl::StatisticalOutlierRemoval<pcl::PointXYZI> sor;
-
-    // 定义 VoxelGrid 滤波器变量
-    pcl::VoxelGrid<pcl::PointXYZI> voxGrid;
 
     // 去除离群点
-    sor.setInputCloud(cloud);
-
-    // 设置在进行统计时考虑查询点邻近点数
-    sor.setMeanK(100);
-
-    // 设置判断是否为离群点的阈值
-    sor.setStddevMulThresh(1.0f);
-
-    // 执行滤波处理保存内点到inputCloud
-    sor.filter(*cloud);
+    sor.setInputCloud(cloudPtr);
+    sor.filter(*cloudPtr);
 
     // 叶素滤波
-    voxGrid.setInputCloud(cloud);
-    voxGrid.setLeafSize(divFilter, divFilter, divFilter);
-    voxGrid.filter(*cloud);
+    voxGrid.setInputCloud(cloudPtr);
+    voxGrid.filter(*cloudPtr);
 
     return;
 }
 
-inline void clusterExt(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud) {
+inline void clusterExt(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudPtr) {
     clusterIndices.clear();
 
     // 判断点云是否为空
-    if (cloud->size() == 0) {
+    if (cloudPtr->size() == 0) {
         return;
     }
     
-    // 点云欧式聚类分割，基于 KdTree 对象作为搜索方法
-    pcl::search::KdTree<pcl::PointXYZI>::Ptr kdTree(new pcl::search::KdTree<pcl::PointXYZI>);
-    kdTree->setInputCloud(cloud);
-
-    pcl::EuclideanClusterExtraction<pcl::PointXYZI> ecExtraction;
-    ecExtraction.setClusterTolerance(CLUSTER_TOL);      // 点之间相隔大于10m的不被认为是一个聚类
-    ecExtraction.setMinClusterSize(CLUSTER_SIZE_MIN);       // 一个聚类里所允许的最少点数
-    ecExtraction.setMaxClusterSize(CLUSTER_SIZE_MAX);    // 一个聚类里所允许的最多点数
-    ecExtraction.setSearchMethod(kdTree);     // 设置搜索方法为 KdTreee
-    ecExtraction.setInputCloud(cloud);     // 设置被搜索的点云
+    // 点云输入 KdTree 对象
+    kdTree->setInputCloud(cloudPtr);
+ 
+    // 设置被搜索的点云
+    ecExtraction.setInputCloud(cloudPtr);     
 
     // 聚类抽取结果保存在一个数组中，数组中每个元素代表抽取的一个组件点云的下标
     ecExtraction.extract(clusterIndices);
@@ -154,14 +150,14 @@ inline void clusterExt(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud) {
     return;
 }
 
-inline void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float objVector[3], float& len, float& wid, float& lwRatio, float& cenX, float& cenY) {
+inline void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudPtr, float objVector[3], float& len, float& wid, float& lwRatio, float& cenX, float& cenY) {
     // 判断点云是否为空
-    if (cloud->size() == 0) {
+    if (cloudPtr->size() == 0) {
         return;
     }
     
     pcl::MomentOfInertiaEstimation<pcl::PointXYZI> feature_extractor;
-    feature_extractor.setInputCloud(cloud);
+    feature_extractor.setInputCloud(cloudPtr);
     feature_extractor.compute();
 
     std::vector<float> moment_of_inertia;
@@ -192,6 +188,96 @@ inline void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, float o
     cenY = mass_center[1];
 
     return;
+}
+
+void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, float yawEstimate,  float& cenX, float& cenY, float& cenZ, float& length, float& width) {
+    // Calculate: 
+    // 1. min and max z for cylinder length
+    // 2. average x, y, z?
+    // 3. fill the cvPoints
+    pcl::PointXYZI centroid;
+    centroid.x = 0;
+    centroid.y = 0;
+    centroid.z = 0;
+    float zMin = 0;
+    float zMax = 0;
+    cv::Mat_<float> cvPoints((int)cluster.size(), 2);
+    for (size_t i = 0; i < cluster.size(); ++i) {
+        centroid.x += cluster.points[i].x;
+        centroid.y += cluster.points[i].y;
+        centroid.z += cluster.points[i].z;
+
+        cvPoints(i, 0) = cluster.points[i].x;  // x
+        cvPoints(i, 1) = cluster.points[i].y;  // y
+
+        if (cluster.points[i].z < zMin || i == 0) {
+            zMin = cluster.points[i].z;
+        }
+            
+        if (zMax < cluster.points[i].z || i == 0) {
+            zMax = cluster.points[i].z;
+        }
+            
+    }
+    centroid.x = centroid.x / static_cast<float>(cluster.size());
+    centroid.y = centroid.y / static_cast<float>(cluster.size());
+    centroid.z = centroid.z / static_cast<float>(cluster.size());
+   
+    // Calculate circumscribed circle on x-y plane
+    cv::Point2f center;
+    float radius;
+    cv::minEnclosingCircle(cv::Mat(cvPoints).reshape(2), center, radius);
+
+    // Paper : Algo.2 Search-Based Rectangle Fitting
+    Eigen::Vector2f e1Star(std::cos(yawEstimate), std::sin(yawEstimate));  // col.11, Algo.2
+    Eigen::Vector2f e2Star(-std::sin(yawEstimate), std::cos(yawEstimate));
+
+    std::vector<float> C1Star;  // col.11, Algo.2
+    std::vector<float> C2Star;  // col.11, Algo.2
+    for (const auto& point : cluster) {
+        C1Star.push_back(point.x * e1Star.x() + point.y * e1Star.y());
+        C2Star.push_back(point.x * e2Star.x() + point.y * e2Star.y());
+    }
+
+    // col.12, Algo.2
+    const float C1StarMin = *std::min_element(C1Star.begin(), C1Star.end());
+    const float C1StarMax = *std::max_element(C1Star.begin(), C1Star.end());
+    const float C2StarMin = *std::min_element(C2Star.begin(), C2Star.end());
+    const float C2StarMax = *std::max_element(C2Star.begin(), C2Star.end());
+
+    const float a1 = std::cos(yawEstimate);
+    const float b1 = std::sin(yawEstimate);
+    const float c1 = C1StarMin;
+    const float a2 = -1.0 * std::sin(yawEstimate);
+    const float b2 = std::cos(yawEstimate);
+    const float c2 = C2StarMin;
+    const float a3 = std::cos(yawEstimate);
+    const float b3 = std::sin(yawEstimate);
+    const float c3 = C1StarMax;
+    const float a4 = -1.0 * std::sin(yawEstimate);
+    const float b4 = std::cos(yawEstimate);
+    const float c4 = C2StarMax;
+
+    // calc center of bounding box
+    float intersection_x_1 = (b1 * c2 - b2 * c1) / (a2 * b1 - a1 * b2);
+    float intersection_y_1 = (a1 * c2 - a2 * c1) / (a1 * b2 - a2 * b1);
+    float intersection_x_2 = (b3 * c4 - b4 * c3) / (a4 * b3 - a3 * b4);
+    float intersection_y_2 = (a3 * c4 - a4 * c3) / (a3 * b4 - a4 * b3);
+
+    // calc dimention of bounding box
+    Eigen::Vector2d ex;
+    Eigen::Vector2d ey;
+    ex << a1 / (std::sqrt(a1 * a1 + b1 * b1)), b1 / (std::sqrt(a1 * a1 + b1 * b1));
+    ey << a2 / (std::sqrt(a2 * a2 + b2 * b2)), b2 / (std::sqrt(a2 * a2 + b2 * b2));
+    Eigen::Vector2d diagVec;
+    diagVec << intersection_x_1 - intersection_x_2, intersection_y_1 - intersection_y_2;
+
+    cenX = (intersection_x_1 + intersection_x_2) / 2.0f;
+    cenY = (intersection_y_1 + intersection_y_2) / 2.0f;
+    cenZ = centroid.z;
+    length = std::fabs(ex.dot(diagVec));
+    width = std::fabs(ey.dot(diagVec));
+
 }
 
 void imuCallback(const sensor_msgs::Imu& msg) {
@@ -261,7 +347,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     
     // Outlier filters
     t0 = ros::Time::now();
-    cloudFilter(pc, 0.1f);
+    cloudFilter(pc);
     inlierPointNum = pc->size();
     removeOutlierCostSecs = (ros::Time::now() - t0).toSec();
 
@@ -287,23 +373,32 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         }
 
         // 提取点云位姿
-        geometry_msgs::Pose objPose;
-        float objVector[3] = {0.0f, 0.0f, 0.0f};
-        float len = 0.0f;
-        float wid = 0.0f;
-        float lwRatio = 0.0f;
+        double yawEstimate = 0.0f;
+        float length = 0.0f;
+        float width = 0.0f;
         float cenX = 0.0f;
         float cenY = 0.0f;
-        clusterDirection(cloudCluster, objVector, len, wid, lwRatio, cenX, cenY);
+        float cenZ = 0.0f;
+        orientation_calc orient_calc_("VARIANCE");
+        bool isSuccessFitted = orient_calc_.LshapeFitting(*cloudCluster, yawEstimate);
 
-        if (len > TARGET_VESSEL_LENGTH_MAX || wid > TARGET_VESSEL_WIDTH_MAX || len < TARGET_VESSEL_LENGTH_MIN || wid < TARGET_VESSEL_WIDTH_MIN) {
+        if (!isSuccessFitted) {
+            ROS_WARN("L-shape fitting failed in cluster %d.", static_cast<int>(it - clusterIndices.begin() + 1));
             continue;
         }
 
+        calculateDimPos(*cloudCluster, yawEstimate, cenX, cenY, cenZ, length, width);
+
+        if (length > TARGET_VESSEL_LENGTH_MAX || width > TARGET_VESSEL_WIDTH_MAX || length < TARGET_VESSEL_LENGTH_MIN || width < TARGET_VESSEL_WIDTH_MIN) {
+            ROS_WARN("Cluster %d does not look like a vessel since it has a length = %.2f and width = %.2f.", static_cast<int>(it - clusterIndices.begin() + 1), length, width);
+            continue;
+        }
+
+        geometry_msgs::Pose objPose;
         objPose.position.x = cenX;
         objPose.position.y = cenY;
         tf2::Quaternion quat;
-        quat.setEuler(0, 0, std::atan(objVector[1]/objVector[0]));
+        quat.setEuler(0, 0, yawEstimate);
 
         objPose.orientation.w = quat.w();
         objPose.orientation.x = quat.x();
@@ -325,7 +420,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     pc->clear();
 
     // Print debug info
-    ROS_INFO("========= No. %d =========", counter++);
+    ROS_INFO("=============== No. %d ===============", counter++);
     ROS_INFO("Point number in raw pointcloud: %d", rawPointNum);
     ROS_INFO("Point number in boxed pointcloud: %d", boxedPointNum); 
     ROS_INFO("Point number in outlier-removed pointcloud: %d", inlierPointNum);
@@ -355,6 +450,7 @@ int main(int argc, char** argv) {
     nh.param<float>("usv_intensity", USV_INTENSITY_MIN, 20);
     nh.param<int>("outlier_static_check_point", OUTLIER_STATIC_CHECK_POINT, 50);
     nh.param<float>("outlier_static_tol", OUTLIER_STATIC_TOL, 1.0f);
+    nh.param<float>("voxel_grid_downsample_factor", VOXEL_GRID_DOWNSAMPLE_FACTOR, 0.2f);
     nh.param<int>("cluster_size_min", CLUSTER_SIZE_MIN, 30);
     nh.param<int>("cluster_size_max", CLUSTER_SIZE_MAX, 10000);
     nh.param<float>("cluster_tol", CLUSTER_TOL, 3.0f);
@@ -363,7 +459,7 @@ int main(int argc, char** argv) {
     nh.param<float>("target_vessel_width_min", TARGET_VESSEL_WIDTH_MIN, 0.25f);
     nh.param<float>("target_vessel_width_max", TARGET_VESSEL_WIDTH_MAX, 8.0f);
 
-    ROS_INFO("USV Lidar data process ros program.");
+    ROS_INFO("USV Lidar data process ROS program.");
 
     // 定义发送
     postPCPub = nh.advertise<sensor_msgs::PointCloud2>("/filter/lidar", 1);
@@ -385,12 +481,29 @@ int main(int argc, char** argv) {
     sync.registerCallback(boost::bind(&lidarcallback, _1, _2, _3));
 
     // 预分配内存
-    lidar1PC->points.reserve(100000);
-    lidar2PC->points.reserve(50000);
-    lidar3PC->points.reserve(50000);
-    lidarRawPC->points.reserve(200000);
-    pc->points.reserve(200000);
+    lidar1PC->points.reserve(150000);
+    lidar2PC->points.reserve(150000);
+    lidar3PC->points.reserve(150000);
+    lidarRawPC->points.reserve(450000);
+    pc->points.reserve(450000);
     clusterIndices.reserve(20);
+
+    // 点云滤波器处理设置
+    
+    // 离群值滤波器设置
+    // 设置在进行统计时考虑查询点邻近点数
+    sor.setMeanK(OUTLIER_STATIC_CHECK_POINT);
+    // 设置判断是否为离群点的阈值
+    sor.setStddevMulThresh(OUTLIER_STATIC_TOL);
+
+    // 叶素滤波器设置
+    voxGrid.setLeafSize(VOXEL_GRID_DOWNSAMPLE_FACTOR, VOXEL_GRID_DOWNSAMPLE_FACTOR, VOXEL_GRID_DOWNSAMPLE_FACTOR);
+
+    // 聚类分割设置
+    ecExtraction.setClusterTolerance(CLUSTER_TOL);      // 点之间相隔大于10m的不被认为是一个聚类
+    ecExtraction.setMinClusterSize(CLUSTER_SIZE_MIN);       // 一个聚类里所允许的最少点数
+    ecExtraction.setMaxClusterSize(CLUSTER_SIZE_MAX);    // 一个聚类里所允许的最多点数
+    ecExtraction.setSearchMethod(kdTree);     // 设置搜索方法为 KdTreee
 
     while (ros::ok()) {
         ros::spinOnce();

@@ -1,6 +1,6 @@
 <launch>
   <param name="use_sim_time" type="bool" value= "true" />
-  <node pkg="tf" type="static_transform_publisher" name="flu_to_map" args="0 0 0 0 0 0 1 USV_FLU map  10" /> 
+  <!-- <node pkg="tf" type="static_transform_publisher" name="flu_to_map" args="0 0 0 0 0 0 1 USV_FLU map  10" />  -->
   <rosparam file="$(find lidar_usv_det)/config/lidar_usv_det.yaml" command="load" />
   <node pkg="lidar_usv_det" type="lidar_usv_det" name="lidar_usv_det" output="screen">
     <param name="x_min" type="double" value="-200.0" />
@@ -13,6 +13,7 @@
     <param name="usv_width" type="double" value="1.25" />
     <param name="outlier_static_check_point" type="int" value="50" />
     <param name="outlier_static_tol" type="double" value="1.0" />
+    <param name="voxel_grid_downsample_factor" type="double" value="0.2" />
     <param name="cluster_size_min" type="int" value="30" />
     <param name="cluster_size_max" type="int" value="10000" />
     <param name="cluster_tol" type="double" value="3.0" />
