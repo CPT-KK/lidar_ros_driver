@@ -34,7 +34,7 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
-// pcl
+// PCL
 #include <pcl/common/common.h>
 #include <pcl/common/transforms.h>
 #include <pcl/filters/conditional_removal.h>
@@ -55,10 +55,12 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl_conversions/pcl_conversions.h>
 
-// opencv
+// PCL GPU
+
+// OpenCV
 #include "opencv2/opencv.hpp"
 
-// local
+// Local
 #include "lshape_estimator.hpp"
 
 using namespace std;
@@ -192,7 +194,7 @@ inline void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudPtr, floa
     return;
 }
 
-void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, float yawEstimate,  float& cenX, float& cenY, float& cenZ, float& length, float& width) {
+inline void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, float yawEstimate,  float& cenX, float& cenY, float& cenZ, float& length, float& width) {
     // Calculate: 
     // 1. min and max z for cylinder length
     // 2. average x, y, z?
@@ -375,7 +377,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         }
 
         // 提取点云位姿
-        double yawEstimate = 0.0f;
+        float yawEstimate = 0.0f;
         float length = 0.0f;
         float width = 0.0f;
         float cenX = 0.0f;
@@ -435,6 +437,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     ROS_INFO("Removing outliers costs: %e s", removeOutlierCostSecs);
     ROS_INFO("Cluster extraction costs: %e s", clusterCostSecs);
     ROS_INFO("State estimation finished costs: %e s\n", stateEstCostSecs);
+    ROS_INFO("This Lidar callback costs: %e s\n", mergeCostSecs + boxedCostSecs + removeOutlierCostSecs + clusterCostSecs + stateEstCostSecs);
 
 }
 
@@ -467,7 +470,7 @@ int main(int argc, char** argv) {
     nh.param<float>("target_vessel_width_min", TARGET_VESSEL_WIDTH_MIN, 0.25f);
     nh.param<float>("target_vessel_width_max", TARGET_VESSEL_WIDTH_MAX, 8.0f);
 
-    ROS_INFO("USV Lidar data process ROS program.");
+    ROS_INFO("============ USV Lidar data process program ============");
 
     // 定义发送
     postPCPub = nh.advertise<sensor_msgs::PointCloud2>("/filter/lidar", 1);

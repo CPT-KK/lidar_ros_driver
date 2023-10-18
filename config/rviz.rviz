@@ -9,6 +9,7 @@ Panels:
         - /Grid1
         - /raw_pointcloud1/PointCloud22
         - /raw_pointcloud1/PointCloud23
+        - /PoseArray1
       Splitter Ratio: 0.5
     Tree Height: 572
   - Class: rviz/Selection
@@ -66,7 +67,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
@@ -75,13 +76,13 @@ Visualization Manager:
       Queue Size: 10
       Selectable: true
       Size (Pixels): 3
-      Size (m): 1
+      Size (m): 0.20000000298023224
       Style: Flat Squares
       Topic: /filter/lidar
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Class: rviz/Group
       Displays:
         - Alpha: 1
@@ -184,7 +185,7 @@ Visualization Manager:
       Axes Length: 0.30000001192092896
       Axes Radius: 0.009999999776482582
       Class: rviz/PoseArray
-      Color: 255; 25; 0
+      Color: 0; 255; 127
       Enabled: true
       Head Length: 0.07000000029802322
       Head Radius: 0.029999999329447746
@@ -223,7 +224,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0.07999999821186066
+      Angle: -0.02500000223517418
       Class: rviz/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -233,10 +234,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 7.207107067108154
+      Scale: 22.90060043334961
       Target Frame: <Fixed Frame>
-      X: 0.7805209159851074
-      Y: 2.925083875656128
+      X: 4.2566962242126465
+      Y: -1.6787790060043335
     Saved: ~
 Window Geometry:
   Displays:
@@ -254,5 +255,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1853
-  X: 2789
-  Y: 126
+  X: 2649
+  Y: 116
