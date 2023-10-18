@@ -72,6 +72,8 @@ float Y_MIN = 0.0f;
 float Y_MAX = 0.0f;
 float Z_MIN = 0.0f;
 float Z_MAX = 0.0f;
+float INTEN_MIN = 0.0f;
+float INTEN_MAX = 0.0f;
 float USV_LENGTH = 0.0f;
 float USV_WIDTH = 0.0f;
 float USV_INTENSITY_MIN = 0.0f;
@@ -311,7 +313,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 #pragma omp parallel for num_threads(8)
     for (size_t i = 0; i < lidarRawPC->size(); i++) {
         // Intensity
-        if(lidarRawPC->points[i].intensity < 10.0f) {
+        if(lidarRawPC->points[i].intensity < INTEN_MIN) {
             continue;
         }
 
@@ -382,6 +384,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         orientation_calc orient_calc_("VARIANCE");
         bool isSuccessFitted = orient_calc_.LshapeFitting(*cloudCluster, yawEstimate);
 
+        // 如果拟合失败，跳过
         if (!isSuccessFitted) {
             ROS_WARN("L-shape fitting failed in cluster %d.", static_cast<int>(it - clusterIndices.begin() + 1));
             continue;
@@ -389,11 +392,13 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 
         calculateDimPos(*cloudCluster, yawEstimate, cenX, cenY, cenZ, length, width);
 
+        // 如果拟合成功，但是长宽不符合要求，跳过
         if (length > TARGET_VESSEL_LENGTH_MAX || width > TARGET_VESSEL_WIDTH_MAX || length < TARGET_VESSEL_LENGTH_MIN || width < TARGET_VESSEL_WIDTH_MIN) {
             ROS_WARN("Cluster %d does not look like a vessel since it has a length = %.2f and width = %.2f.", static_cast<int>(it - clusterIndices.begin() + 1), length, width);
             continue;
         }
 
+        // 如果拟合成功，且长宽符合要求，发布
         geometry_msgs::Pose objPose;
         objPose.position.x = cenX;
         objPose.position.y = cenY;
@@ -434,6 +439,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 }
 
 int main(int argc, char** argv) {
+    // 初始化 ROS 节点
     ros::init(argc, argv, "lidar_usv_det");
     ros::NodeHandle nh("~");
     ros::Rate rate(10.0);
@@ -445,6 +451,8 @@ int main(int argc, char** argv) {
     nh.param<float>("y_max", Y_MAX, 70.0f);
     nh.param<float>("z_min", Z_MIN, -2.0f);
     nh.param<float>("z_max", Z_MAX, 4.0f);
+    nh.param<float>("inten_min", INTEN_MIN, 20.0f);
+    nh.param<float>("inten_max", INTEN_MAX, 100.0f);
     nh.param<float>("usv_length", USV_LENGTH, 3.6f);
     nh.param<float>("usv_width", USV_WIDTH, 1.25f);
     nh.param<float>("usv_intensity", USV_INTENSITY_MIN, 20);

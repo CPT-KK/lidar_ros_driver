@@ -10,6 +10,8 @@
     <param name="y_max" type="double" value="70.0" />
     <param name="z_min" type="double" value="-2.0" />
     <param name="z_max" type="double" value="4.0" />
+    <param name="inten_min" type="double" value="10.0" />
+    <param name="inten_max" type="double" value="256.0" />
     <param name="usv_length" type="double" value="3.6" />
     <param name="usv_width" type="double" value="1.25" />
     <param name="outlier_static_check_point" type="int" value="50" />
