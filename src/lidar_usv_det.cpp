@@ -436,7 +436,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     ROS_INFO("Box filter costs: %e s", boxedCostSecs);
     ROS_INFO("Removing outliers costs: %e s", removeOutlierCostSecs);
     ROS_INFO("Cluster extraction costs: %e s", clusterCostSecs);
-    ROS_INFO("State estimation finished costs: %e s\n", stateEstCostSecs);
+    ROS_INFO("State estimation finished costs: %e s", stateEstCostSecs);
     ROS_INFO("This Lidar callback costs: %e s\n", mergeCostSecs + boxedCostSecs + removeOutlierCostSecs + clusterCostSecs + stateEstCostSecs);
 
 }
