@@ -81,6 +81,8 @@ float USV_WIDTH = 0.0f;
 float USV_INTENSITY_MIN = 0.0f;
 int OUTLIER_STATIC_CHECK_POINT = 0;
 float OUTLIER_STATIC_TOL = 0.0f;
+float OUTLIER_RADIUS_SEARCH = 0.0f;
+int OUTLIER_RADIUS_MIN_NEIGHBOR = 0.0f;
 float VOXEL_GRID_DOWNSAMPLE_FACTOR = 0.0f;
 int CLUSTER_SIZE_MIN = 0;
 int CLUSTER_SIZE_MAX = 0;
@@ -103,6 +105,7 @@ std::vector<pcl::PointIndices> clusterIndices;
 
 // 创建离群点滤波器对象
 pcl::StatisticalOutlierRemoval<pcl::PointXYZI> sor;
+pcl::RadiusOutlierRemoval<pcl::PointXYZI> ror;
 
 // 定义 VoxelGrid 滤波器变量
 pcl::VoxelGrid<pcl::PointXYZI> voxGrid;
@@ -124,8 +127,10 @@ inline void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudPtr) {
     }
 
     // 去除离群点
-    sor.setInputCloud(cloudPtr);
-    sor.filter(*cloudPtr);
+    // sor.setInputCloud(cloudPtr);
+    // sor.filter(*cloudPtr);
+    ror.setInputCloud(cloudPtr);
+    ror.filter(*cloudPtr);
 
     // 叶素滤波
     voxGrid.setInputCloud(cloudPtr);
@@ -238,6 +243,8 @@ inline void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, floa
 
     std::vector<float> C1Star;  // col.11, Algo.2
     std::vector<float> C2Star;  // col.11, Algo.2
+    C1Star.reserve(cluster.size());
+    C2Star.reserve(cluster.size());
     for (const auto& point : cluster) {
         C1Star.push_back(point.x * e1Star.x() + point.y * e1Star.y());
         C2Star.push_back(point.x * e2Star.x() + point.y * e2Star.y());
@@ -312,7 +319,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     
     // Cut filter
     t0 = ros::Time::now();
-#pragma omp parallel for num_threads(8)
+#pragma omp parallel for
     for (size_t i = 0; i < lidarRawPC->size(); i++) {
         // Intensity
         if(lidarRawPC->points[i].intensity < INTEN_MIN) {
@@ -365,7 +372,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     objects.header.stamp = ros::Time::now();
     objects.header.frame_id = "map";
     objects.poses.reserve(clusterIndices.size());
-#pragma omp parallel for num_threads(8)    
+#pragma omp parallel for  
     for (std::vector<pcl::PointIndices>::const_iterator it = clusterIndices.begin(); it != clusterIndices.end(); ++it) {
         // 创建临时保存点云簇的点云
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloudCluster(new pcl::PointCloud<pcl::PointXYZI>);
@@ -387,11 +394,15 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 
         // 如果拟合失败，跳过
         if (!isSuccessFitted) {
-            ROS_WARN("L-shape fitting failed in cluster %d.", static_cast<int>(it - clusterIndices.begin() + 1));
+            ROS_WARN("L-shape fitting failed in Cluster %d.", static_cast<int>(it - clusterIndices.begin() + 1));
             continue;
         }
 
         calculateDimPos(*cloudCluster, yawEstimate, cenX, cenY, cenZ, length, width);
+        if (length < width) {
+            std::swap(length, width);
+            yawEstimate = yawEstimate + 0.5 * M_PI;
+        }
 
         // 如果拟合成功，但是长宽不符合要求，跳过
         if (length > TARGET_VESSEL_LENGTH_MAX || width > TARGET_VESSEL_WIDTH_MAX || length < TARGET_VESSEL_LENGTH_MIN || width < TARGET_VESSEL_WIDTH_MIN) {
@@ -404,13 +415,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         objPose.position.x = cenX;
         objPose.position.y = cenY;
         tf2::Quaternion quat;
-        if (length < width) {
-            quat.setEuler(0, 0, yawEstimate + 0.5 * M_PI);
-        } else {
-            quat.setEuler(0, 0, yawEstimate);
-        }
-        
-
+        quat.setEuler(0, 0, yawEstimate);
         objPose.orientation.w = quat.w();
         objPose.orientation.x = quat.x();
         objPose.orientation.y = quat.y();
@@ -436,12 +441,12 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     ROS_INFO("Point number in boxed pointcloud: %d", boxedPointNum); 
     ROS_INFO("Point number in outlier-removed pointcloud: %d", inlierPointNum);
     ROS_INFO("Cluster number: %d", static_cast<int>(clusterIndices.size()));
-    ROS_INFO("Merge all point clouds costs: %e s", mergeCostSecs); 
-    ROS_INFO("Box filter costs: %e s", boxedCostSecs);
-    ROS_INFO("Removing outliers costs: %e s", removeOutlierCostSecs);
-    ROS_INFO("Cluster extraction costs: %e s", clusterCostSecs);
-    ROS_INFO("State estimation finished costs: %e s", stateEstCostSecs);
-    ROS_INFO("This Lidar callback costs: %e s\n", mergeCostSecs + boxedCostSecs + removeOutlierCostSecs + clusterCostSecs + stateEstCostSecs);
+    // ROS_INFO("Merge all point clouds costs: %e s", mergeCostSecs); 
+    // ROS_INFO("Box filter costs: %e s", boxedCostSecs);
+    // ROS_INFO("Removing outliers costs: %e s", removeOutlierCostSecs);
+    // ROS_INFO("Cluster extraction costs: %e s", clusterCostSecs);
+    // ROS_INFO("State estimation finished costs: %e s", stateEstCostSecs);
+    ROS_INFO("This callback costs: %e s\n", mergeCostSecs + boxedCostSecs + removeOutlierCostSecs + clusterCostSecs + stateEstCostSecs);
 
 }
 
@@ -465,6 +470,8 @@ int main(int argc, char** argv) {
     nh.param<float>("usv_intensity", USV_INTENSITY_MIN, 20);
     nh.param<int>("outlier_static_check_point", OUTLIER_STATIC_CHECK_POINT, 50);
     nh.param<float>("outlier_static_tol", OUTLIER_STATIC_TOL, 1.0f);
+    nh.param<float>("outlier_radius_search", OUTLIER_RADIUS_SEARCH, 6.0f);
+    nh.param<int>("outlier_radius_min_neighbor", OUTLIER_RADIUS_MIN_NEIGHBOR, 4);
     nh.param<float>("voxel_grid_downsample_factor", VOXEL_GRID_DOWNSAMPLE_FACTOR, 0.2f);
     nh.param<int>("cluster_size_min", CLUSTER_SIZE_MIN, 30);
     nh.param<int>("cluster_size_max", CLUSTER_SIZE_MAX, 10000);
@@ -506,19 +513,19 @@ int main(int argc, char** argv) {
     // 点云滤波器处理设置
     
     // 离群值滤波器设置
-    // 设置在进行统计时考虑查询点邻近点数
-    sor.setMeanK(OUTLIER_STATIC_CHECK_POINT);
-    // 设置判断是否为离群点的阈值
-    sor.setStddevMulThresh(OUTLIER_STATIC_TOL);
+    sor.setMeanK(OUTLIER_STATIC_CHECK_POINT);       // 设置在进行统计时考虑查询点邻近点数
+    sor.setStddevMulThresh(OUTLIER_STATIC_TOL);     // 设置判断是否为离群点的阈值
+    ror.setRadiusSearch(OUTLIER_RADIUS_SEARCH);     
+    ror.setMinNeighborsInRadius(OUTLIER_RADIUS_MIN_NEIGHBOR);
 
     // 叶素滤波器设置
     voxGrid.setLeafSize(VOXEL_GRID_DOWNSAMPLE_FACTOR, VOXEL_GRID_DOWNSAMPLE_FACTOR, VOXEL_GRID_DOWNSAMPLE_FACTOR);
 
     // 聚类分割设置
-    ecExtraction.setClusterTolerance(CLUSTER_TOL);      // 点之间相隔大于10m的不被认为是一个聚类
-    ecExtraction.setMinClusterSize(CLUSTER_SIZE_MIN);       // 一个聚类里所允许的最少点数
-    ecExtraction.setMaxClusterSize(CLUSTER_SIZE_MAX);    // 一个聚类里所允许的最多点数
-    ecExtraction.setSearchMethod(kdTree);     // 设置搜索方法为 KdTreee
+    ecExtraction.setClusterTolerance(CLUSTER_TOL);  // 点之间相隔大于10m的不被认为是一个聚类
+    ecExtraction.setMinClusterSize(CLUSTER_SIZE_MIN);   // 一个聚类里所允许的最少点数
+    ecExtraction.setMaxClusterSize(CLUSTER_SIZE_MAX);   // 一个聚类里所允许的最多点数
+    ecExtraction.setSearchMethod(kdTree);   // 设置搜索方法为 KdTreee
 
     while (ros::ok()) {
         ros::spinOnce();
