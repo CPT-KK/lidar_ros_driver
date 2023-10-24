@@ -12,7 +12,7 @@
     <param name="inten_min" type="double" value="10.0" />
     <param name="inten_max" type="double" value="256.0" />
     <param name="usv_length" type="double" value="3.6" />
-    <param name="usv_width" type="double" value="1.25" />
+    <param name="usv_width" type="double" value="1.85" />
     <param name="outlier_static_check_point" type="int" value="50" />
     <param name="outlier_static_tol" type="double" value="1.0" />
     <param name="voxel_grid_downsample_factor" type="double" value="0.2" />

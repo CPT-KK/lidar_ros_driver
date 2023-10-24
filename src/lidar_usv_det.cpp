@@ -336,7 +336,6 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         }
 
         // 现在的点应该是 OK 的
-        lidarRawPC->points[i].z = 0.0f;
         Eigen::Vector3d thisPoint(lidarRawPC->points[i].x, lidarRawPC->points[i].y, lidarRawPC->points[i].z);
         thisPoint = imuPose * thisPoint;
 
@@ -405,7 +404,12 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         objPose.position.x = cenX;
         objPose.position.y = cenY;
         tf2::Quaternion quat;
-        quat.setEuler(0, 0, yawEstimate);
+        if (length < width) {
+            quat.setEuler(0, 0, yawEstimate + 0.5 * M_PI);
+        } else {
+            quat.setEuler(0, 0, yawEstimate);
+        }
+        
 
         objPose.orientation.w = quat.w();
         objPose.orientation.x = quat.x();
