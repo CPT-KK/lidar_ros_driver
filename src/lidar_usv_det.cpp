@@ -491,7 +491,7 @@ int main(int argc, char** argv) {
     imuSub = nh.subscribe("/mavros/imu/data", 1, imuCallback);
 
     // 定义时间同步订阅
-    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_231", 3);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_234", 3);
     message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar1(nh, "/livox/lidar_192_168_147_232", 3);
     message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar2(nh, "/livox/lidar_192_168_147_233", 3);
 
@@ -503,11 +503,11 @@ int main(int argc, char** argv) {
     sync.registerCallback(boost::bind(&lidarcallback, _1, _2, _3));
 
     // 预分配内存
-    lidar1PC->points.reserve(150000);
-    lidar2PC->points.reserve(150000);
-    lidar3PC->points.reserve(150000);
-    lidarRawPC->points.reserve(450000);
-    pc->points.reserve(450000);
+    lidar1PC->points.reserve(250000);
+    lidar2PC->points.reserve(250000);
+    lidar3PC->points.reserve(250000);
+    lidarRawPC->points.reserve(750000);
+    pc->points.reserve(500000);
     clusterIndices.reserve(20);
 
     // 点云滤波器处理设置
