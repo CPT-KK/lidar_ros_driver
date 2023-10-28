@@ -425,8 +425,12 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 
         calculateDimPos(*cloudCluster, yawEstimate, cenX, cenY, cenZ, length, width);
         if (length < width) {
+            // 交换长宽
             std::swap(length, width);
+
+            // 估计的航向增加 90 度，并且将其限制在 [-pi/2, pi/2] 之间
             yawEstimate = yawEstimate + 0.5 * M_PI;
+            yawEstimate = atan(tan(yawEstimate));
         }
 
         // 如果拟合成功，但是长宽不符合要求，跳过
