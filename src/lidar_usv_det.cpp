@@ -55,13 +55,15 @@
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl_conversions/pcl_conversions.h>
 
-// PCL GPU
-
 // OpenCV
 #include "opencv2/opencv.hpp"
 
 // Local
 #include "lshape_estimator.hpp"
+
+// Define
+// #define LEFT_HAP
+#define PRINT_LEVEL 1
 
 using namespace std;
 
@@ -297,28 +299,36 @@ void imuCallback(const sensor_msgs::Imu& msg) {
 }
 
 void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const sensor_msgs::PointCloud2::ConstPtr& lidar1, const sensor_msgs::PointCloud2::ConstPtr& lidar2) {
-    // Record init time
-    ros::Time t0 = ros::Time::now();
-    int rawPointNum = 0;
-    int boxedPointNum = 0;
-    int inlierPointNum = 0;
-    float mergeCostSecs = 0.0f;
-    float boxedCostSecs = 0.0f;
-    float removeOutlierCostSecs = 0.0f;
-    float clusterCostSecs = 0.0f;
-    float stateEstCostSecs = 0.0f;
-    
+    // Record init time    
+    #ifdef DEBUG
+        #if PRINT_LEVEL > 0
+            int boxedPointNum = 0;
+            int inlierPointNum = 0;
+            #if PRINT_LEVEL > 1
+                ros::Time t0 = ros::Time::now();
+                ros::Time t1 = ros::Time::now();
+                ros::Time t2 = ros::Time::now();
+                ros::Time t3 = ros::Time::now();
+                ros::Time t4 = ros::Time::now();
+                ros::Time t5 = ros::Time::now();
+            #endif
+        #endif
+    #endif
+
     // Merge 3 pointclouds
-    t0 = ros::Time::now();
     pcl::fromROSMsg(*lidar0, *lidar1PC);
     pcl::fromROSMsg(*lidar1, *lidar2PC);
     pcl::fromROSMsg(*lidar2, *lidar3PC);
     *lidarRawPC = *lidar1PC + *lidar2PC + *lidar3PC;
-    rawPointNum = lidarRawPC->size();
-    mergeCostSecs = (ros::Time::now() - t0).toSec();
-    
+    #ifdef DEBUG
+        #if PRINT_LEVEL > 0
+            #if PRINT_LEVEL > 1
+                t1 = ros::Time::now();
+            #endif
+        #endif
+    #endif
+ 
     // Cut filter
-    t0 = ros::Time::now();
 #pragma omp parallel for
     for (size_t i = 0; i < lidarRawPC->size(); i++) {
         // Intensity
@@ -352,22 +362,37 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         point_pcl.z = thisPoint[2];
         pc->push_back(point_pcl);
     }
-    boxedPointNum = pc->size();
-    boxedCostSecs = (ros::Time::now() - t0).toSec();
+    #ifdef DEBUG
+        #if PRINT_LEVEL > 0
+            boxedPointNum = pc->size();
+            #if PRINT_LEVEL > 1
+                t2 = ros::Time::now();
+            #endif
+        #endif
+    #endif
     
     // Outlier filters
-    t0 = ros::Time::now();
     cloudFilter(pc);
-    inlierPointNum = pc->size();
-    removeOutlierCostSecs = (ros::Time::now() - t0).toSec();
+    #ifdef DEBUG
+        #if PRINT_LEVEL > 0
+            inlierPointNum = pc->size();
+            #if PRINT_LEVEL > 1
+                t3 = ros::Time::now();
+            #endif
+        #endif
+    #endif
 
     // Cluster extraction
-    t0 = ros::Time::now();
     clusterExt(pc);
-    clusterCostSecs = (ros::Time::now() - t0).toSec();
+    #ifdef DEBUG
+        #if PRINT_LEVEL > 0
+            #if PRINT_LEVEL > 1
+                t4 = ros::Time::now();
+            #endif
+        #endif
+    #endif
 
     // Cluster state estimation
-    t0 = ros::Time::now();
     geometry_msgs::PoseArray objects;
     objects.header.stamp = ros::Time::now();
     objects.header.frame_id = "map";
@@ -422,8 +447,14 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         objPose.orientation.z = quat.z();
         objects.poses.push_back(objPose);
     }
-    stateEstCostSecs = (ros::Time::now() - t0).toSec();
-
+    #ifdef DEBUG
+        #if PRINT_LEVEL > 0
+            #if PRINT_LEVEL > 1
+                t5 = ros::Time::now();
+            #endif
+        #endif
+    #endif
+    
     // Publish object 
     objectPub.publish(objects); 
 
@@ -436,18 +467,24 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     pc->clear();
 
     // Print debug info
-    ROS_INFO("=============== No. %d ===============", counter++);
-    ROS_INFO("Point number in raw pointcloud: %d", rawPointNum);
-    ROS_INFO("Point number in boxed pointcloud: %d", boxedPointNum); 
-    ROS_INFO("Point number in outlier-removed pointcloud: %d", inlierPointNum);
-    ROS_INFO("Cluster number: %d", static_cast<int>(clusterIndices.size()));
-    // ROS_INFO("Merge all point clouds costs: %e s", mergeCostSecs); 
-    // ROS_INFO("Box filter costs: %e s", boxedCostSecs);
-    // ROS_INFO("Removing outliers costs: %e s", removeOutlierCostSecs);
-    // ROS_INFO("Cluster extraction costs: %e s", clusterCostSecs);
-    // ROS_INFO("State estimation finished costs: %e s", stateEstCostSecs);
-    ROS_INFO("This callback costs: %e s\n", mergeCostSecs + boxedCostSecs + removeOutlierCostSecs + clusterCostSecs + stateEstCostSecs);
+    #ifdef DEBUG
+        #if PRINT_LEVEL > 0
+            ROS_INFO("=============== No. %d ===============", counter++);
+            ROS_INFO("Point number in raw pointcloud: %d", lidarRawPC->size());
+            ROS_INFO("Point number in boxed pointcloud: %d", boxedPointNum); 
+            ROS_INFO("Point number in outlier-removed pointcloud: %d", inlierPointNum);
+            ROS_INFO("Cluster number: %d", static_cast<int>(clusterIndices.size()));
 
+            #if PRINT_LEVEL > 1
+                ROS_INFO("Merge all point clouds costs: %e s", (t1 - t0).tosec()); 
+                ROS_INFO("Box filter costs: %e s", (t2 - t1).tosec());
+                ROS_INFO("Removing outliers costs: %e s", (t3 - t2).tosec());
+                ROS_INFO("Cluster extraction costs: %e s", (t4 - t3).tosec());
+                ROS_INFO("State estimation finished costs: %e s", (t5 - t4).tosec());
+                ROS_INFO("This callback costs: %e s\n", (t5 - t0).tosec());
+            #endif 
+        #endif
+    #endif
 }
 
 int main(int argc, char** argv) {
@@ -491,7 +528,11 @@ int main(int argc, char** argv) {
     imuSub = nh.subscribe("/mavros/imu/data", 1, imuCallback);
 
     // 定义时间同步订阅
-    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_234", 3);
+    #ifdef LEFT_HAP
+        message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_234", 3);
+    #else
+        message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_231", 3);
+    #endif
     message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar1(nh, "/livox/lidar_192_168_147_232", 3);
     message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar2(nh, "/livox/lidar_192_168_147_233", 3);
 
