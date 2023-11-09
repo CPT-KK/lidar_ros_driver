@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package>
-  <name>lidar_usv_det</name>
+  <name>lidar_ros_driver</name>
   <version>1.0.0</version>
   <description>detect usv by lidar sensor</description>
 

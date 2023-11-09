@@ -64,7 +64,7 @@
 #include "lshape_estimator.hpp"
 
 // Define
-// #define LEFT_HAP
+#define LEFT_IS_HAP
 #define PRINT_LEVEL 1
 
 using namespace std;
@@ -531,10 +531,10 @@ int main(int argc, char** argv) {
     objectPub = nh.advertise<geometry_msgs::PoseArray>("/filter/target", 1);
 
     // 定义订阅
-    imuSub = nh.subscribe("/mavros/imu/data", 1, imuCallback);
+    imuSub = nh.subscribe("/usv/imu/data", 1, imuCallback);
 
     // 定义时间同步订阅
-    #ifdef LEFT_HAP
+    #ifdef LEFT_IS_HAP
         message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_234", 3);
     #else
         message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_231", 3);
