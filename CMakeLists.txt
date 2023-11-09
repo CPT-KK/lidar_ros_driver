@@ -17,7 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
         nav_msgs
         visualization_msgs
         message_filters
-        )
+)
 
 catkin_package(
         CATKIN_DEPENDS
@@ -38,16 +38,14 @@ find_package(PCL REQUIRED QUIET)
 find_package(OpenCV REQUIRED)
 # include directories
 include_directories(
-        ${catkin_INCLUDE_DIRS}
+    ${catkin_INCLUDE_DIRS}
+    include 
+    ${EIGEN3_INCLUDE_DIR}
+    ${OpenCV_INCLUDE_DIRS}
+    ${PCL_INCLUDE_DIRS}
+    ${PCL_CONVERSION_INCLUDE_DIRS}
+    ${YAML_CPP_INCLUDE_DIR}
 )
-include_directories(
-	include 
-        ${EIGEN3_INCLUDE_DIR}
-        ${OpenCV_INCLUDE_DIRS}
-        ${PCL_INCLUDE_DIRS}
-        ${YAML_CPP_INCLUDE_DIR}
-)
-
 
 # link directories
 link_directories(
