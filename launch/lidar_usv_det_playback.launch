@@ -2,7 +2,7 @@
   <param name="use_sim_time" type="bool" value= "true" />
   <node pkg="tf" type="static_transform_publisher" name="base_link_to_map" args="0 0 0 0 0 0 1 base_link map 10" /> 
 
-  <node pkg="lidar_usv_det" type="lidar_usv_det" name="lidar_usv_det" output="screen">
+  <node pkg="lidar_ros_driver" type="lidar_usv_det" name="lidar_usv_det" output="screen">
     <param name="x_min" type="double" value="-160.0" />
     <param name="x_max" type="double" value="160.0" />
     <param name="y_min" type="double" value="-70.0" />
