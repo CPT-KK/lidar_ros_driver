@@ -52,6 +52,8 @@
 #include <pcl/sample_consensus/model_types.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
+#include <pcl/search/kdtree.h>
+#include <pcl/segmentation/extract_clusters.h>
 #include <pcl/segmentation/sac_segmentation.h>
 #include <pcl_conversions/pcl_conversions.h>
 
@@ -572,6 +574,11 @@ int main(int argc, char** argv) {
     ecExtraction.setMaxClusterSize(CLUSTER_SIZE_MAX);   // 一个聚类里所允许的最多点数
     ecExtraction.setSearchMethod(kdTree);   // 设置搜索方法为 KdTreee
 
+    while (ros::ok()) {
+        ros::spinOnce();
+        rate.sleep();
+    }
+    return 0;
     while (ros::ok()) {
         ros::spinOnce();
         rate.sleep();
