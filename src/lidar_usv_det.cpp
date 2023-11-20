@@ -579,9 +579,4 @@ int main(int argc, char** argv) {
         rate.sleep();
     }
     return 0;
-    while (ros::ok()) {
-        ros::spinOnce();
-        rate.sleep();
-    }
-    return 0;
 };
