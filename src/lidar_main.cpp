@@ -446,7 +446,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         objPose.position.x = cenX;
         objPose.position.y = cenY;
         tf2::Quaternion quat;
-        quat.setEuler(0, 0, yawEstimate);
+        quat.setEuler(length / 100.0f, width / 100.0f, yawEstimate);
         objPose.orientation.w = quat.w();
         objPose.orientation.x = quat.x();
         objPose.orientation.y = quat.y();

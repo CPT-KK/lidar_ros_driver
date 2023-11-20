@@ -43,7 +43,6 @@ include_directories(
     ${EIGEN3_INCLUDE_DIR}
     ${OpenCV_INCLUDE_DIRS}
     ${PCL_INCLUDE_DIRS}
-    ${PCL_CONVERSION_INCLUDE_DIRS}
     ${YAML_CPP_INCLUDE_DIR}
 )
 
@@ -56,7 +55,8 @@ link_directories(
 ###########
 ## Build ##
 ###########
-# Range Image Projection
-add_executable(lidar_usv_det src/lidar_usv_det.cpp src/lshape_estimator.cpp)
-add_dependencies(lidar_usv_det ${catkin_EXPORTED_TARGETS})
-target_link_libraries(lidar_usv_det ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${EIGEN3_LIBS} ${OpenCV_LIBS})
+aux_source_directory(src DIR_SRCS)
+add_executable(${PROJECT_NAME} ${DIR_SRCS})
+
+add_dependencies(${PROJECT_NAME} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${EIGEN3_LIBS} ${OpenCV_LIBS})
