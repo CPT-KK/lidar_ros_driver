@@ -203,7 +203,7 @@ inline void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudPtr, floa
     return;
 }
 
-inline void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, float yawEstimate,  float& cenX, float& cenY, float& cenZ, float& length, float& width) {
+inline void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, float yawEstimate,  float& cenX, float& cenY, float& cenZ, float& length, float& width, float& highestX, float& highestY, float& highestZ) {
     // Calculate: 
     // 1. min and max z for cylinder length
     // 2. average x, y, z?
@@ -229,6 +229,9 @@ inline void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, floa
             
         if (zMax < cluster.points[i].z || i == 0) {
             zMax = cluster.points[i].z;
+            highestX = cluster.points[i].x;
+            highestY = cluster.points[i].y;
+            highestZ = cluster.points[i].z;
         }
             
     }
@@ -416,6 +419,9 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         float cenX = 0.0f;
         float cenY = 0.0f;
         float cenZ = 0.0f;
+        float highestX = 0.0f;
+        float highestY = 0.0f;
+        float highestZ = 0.0f;
         orientation_calc orient_calc_("VARIANCE");
         bool isSuccessFitted = orient_calc_.LshapeFitting(*cloudCluster, yawEstimate);
 
@@ -425,7 +431,7 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
             continue;
         }
 
-        calculateDimPos(*cloudCluster, yawEstimate, cenX, cenY, cenZ, length, width);
+        calculateDimPos(*cloudCluster, yawEstimate, cenX, cenY, cenZ, length, width, highestX, highestY, highestZ);
         if (length < width) {
             // 交换长宽
             std::swap(length, width);
@@ -443,14 +449,20 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 
         // 如果拟合成功，且长宽符合要求，发布
         geometry_msgs::Pose objPose;
+        int16_t highestXInt = static_cast<int16_t>(highestX * 100);
+        int16_t highestYInt = static_cast<int16_t>(highestY * 100);
+        int16_t highestZInt = static_cast<int16_t>(highestZ * 100);
+        int64_t orientationZTmp = 0;
         objPose.position.x = cenX;
         objPose.position.y = cenY;
-        tf2::Quaternion quat;
-        quat.setEuler(length / 100.0f, width / 100.0f, yawEstimate);
-        objPose.orientation.w = quat.w();
-        objPose.orientation.x = quat.x();
-        objPose.orientation.y = quat.y();
-        objPose.orientation.z = quat.z();
+        objPose.orientation.w = yawEstimate;
+        objPose.orientation.x = length;
+        objPose.orientation.y = width;
+        orientationZTmp |= static_cast<int64_t>(highestXInt);
+        orientationZTmp |= static_cast<int64_t>(highestYInt) << 16;
+        orientationZTmp |= static_cast<int64_t>(highestZInt) << 32;
+        objPose.orientation.z = *reinterpret_cast<double*>(&orientationZTmp);
+
         objects.poses.push_back(objPose);
     }
     #ifdef DEBUG
