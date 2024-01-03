@@ -24,6 +24,7 @@
 
 #include <sensor_msgs/Imu.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/point_cloud2_iterator.h>
 
 #include <tf/LinearMath/Quaternion.h>
 #include <tf/transform_broadcaster.h>
@@ -71,7 +72,7 @@ using namespace std;
 
 // ROS 订阅与接收定义
 ros::Publisher postPCPub, objectPub;
-ros::Subscriber imuSub;
+ros::Subscriber imuSub, lidarSub;
 float X_MIN = 0.0f;
 float X_MAX = 0.0f;
 float Y_MIN = 0.0f;
@@ -303,7 +304,7 @@ void imuCallback(const sensor_msgs::Imu& msg) {
     imuPose = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
 }
 
-void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const sensor_msgs::PointCloud2::ConstPtr& lidar1, const sensor_msgs::PointCloud2::ConstPtr& lidar2) {
+void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const sensor_msgs::PointCloud2::ConstPtr& lidar1, const sensor_msgs::PointCloud2::ConstPtr& lidar2) {
     // Record init time    
     #ifdef DEBUG
         #if PRINT_LEVEL > 0
@@ -449,20 +450,26 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 
         // 如果拟合成功，且长宽符合要求，发布
         geometry_msgs::Pose objPose;
-        int16_t highestXInt = static_cast<int16_t>(highestX * 100);
-        int16_t highestYInt = static_cast<int16_t>(highestY * 100);
-        int16_t highestZInt = static_cast<int16_t>(highestZ * 100);
-        int64_t orientationZTmp = 0;
+        tf2::Quaternion quat;
+
+        quat.setEuler(0, 0, yawEstimate);
+
         objPose.position.x = cenX;
         objPose.position.y = cenY;
-        objPose.orientation.w = yawEstimate;
+        objPose.position.z = cenZ;
+        objPose.orientation.w = quat.w();
+        objPose.orientation.x = quat.x();
+        objPose.orientation.y = quat.y();
+        objPose.orientation.z = quat.z();
+        objects.poses.push_back(objPose);
+
+        objPose.position.x = highestX;
+        objPose.position.y = highestY;
+        objPose.position.z = highestZ;
+        objPose.orientation.w = 0;
         objPose.orientation.x = length;
         objPose.orientation.y = width;
-        orientationZTmp |= static_cast<int64_t>(highestXInt);
-        orientationZTmp |= static_cast<int64_t>(highestYInt) << 16;
-        orientationZTmp |= static_cast<int64_t>(highestZInt) << 32;
-        objPose.orientation.z = *reinterpret_cast<double*>(&orientationZTmp);
-
+        objPose.orientation.z = 0;
         objects.poses.push_back(objPose);
     }
     #ifdef DEBUG
@@ -503,6 +510,34 @@ void lidarcallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
             #endif 
         #endif
     #endif
+}
+
+void tmplidarCb(const sensor_msgs::PointCloud2::ConstPtr& lidar0) {
+    sensor_msgs::PointCloud2 cloud;
+    cloud.height = 1;
+    cloud.width = 1;
+    sensor_msgs::PointCloud2Modifier modifier(cloud);
+    modifier.setPointCloud2Fields(4, 
+                                 "x", 1, sensor_msgs::PointField::FLOAT32,
+                                 "y", 1, sensor_msgs::PointField::FLOAT32,
+                                 "z", 1, sensor_msgs::PointField::FLOAT32,
+                                 "intensity", 1, sensor_msgs::PointField::FLOAT32);
+    modifier.resize(cloud.width);
+
+    sensor_msgs::PointCloud2Iterator<float> iter_x(cloud, "x");
+    sensor_msgs::PointCloud2Iterator<float> iter_y(cloud, "y");
+    sensor_msgs::PointCloud2Iterator<float> iter_z(cloud, "z");
+    sensor_msgs::PointCloud2Iterator<float> iter_intensity(cloud, "intensity");
+
+    for (size_t i = 0; i < cloud.width; ++i, ++iter_x, ++iter_y, ++iter_z, ++iter_intensity) {
+        // 假设您有一个数组或类似的结构来存储您的点和强度
+        *iter_x = 0;
+        *iter_y = 0;
+        *iter_z = 0;
+        *iter_intensity = 0.517;
+    }
+
+    lidarCallback(lidar0, boost::make_shared<const sensor_msgs::PointCloud2>(cloud), boost::make_shared<const sensor_msgs::PointCloud2>(cloud));
 }
 
 int main(int argc, char** argv) {
@@ -559,7 +594,10 @@ int main(int argc, char** argv) {
     message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(3), subLidar0, subLidar1, subLidar2);
     
     // 注册回调函数，当消息时间接近并准备同步时，该函数会被调用
-    sync.registerCallback(boost::bind(&lidarcallback, _1, _2, _3));
+    sync.registerCallback(boost::bind(&lidarCallback, _1, _2, _3));
+
+    // TMP
+    ros::Subscriber lidarSub = nh.subscribe("/hesai/pandar", 1, tmplidarCb);
 
     // 预分配内存
     lidar1PC->points.reserve(250000);
