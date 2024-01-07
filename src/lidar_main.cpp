@@ -205,98 +205,88 @@ inline void clusterDirection(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudPtr, floa
 }
 
 inline void calculateDimPos(const pcl::PointCloud<pcl::PointXYZI>& cluster, float yawEstimate,  float& cenX, float& cenY, float& cenZ, float& length, float& width, float& highestX, float& highestY, float& highestZ) {
-    // Calculate: 
-    // 1. min and max z for cylinder length
-    // 2. average x, y, z?
-    // 3. fill the cvPoints
-    pcl::PointXYZI centroid;
-    centroid.x = 0;
-    centroid.y = 0;
-    centroid.z = 0;
-    float zMin = 0;
-    float zMax = 0;
-    cv::Mat_<float> cvPoints((int)cluster.size(), 2);
+
+    // Calculate the center of the cluster
+    // Transform x and y according to yawEstimate, record min and max after the transform
+    std::vector<float> C1Star(cluster.size());
+    std::vector<float> C2Star(cluster.size());
+    float C1StarMin = cluster.points[0].x * std::cos(yawEstimate) + cluster.points[0].y * std::sin(yawEstimate);
+    float C1StarMax = cluster.points[0].x * std::cos(yawEstimate) + cluster.points[0].y * std::sin(yawEstimate);
+    float C2StarMin = cluster.points[0].x * (-std::sin(yawEstimate)) + cluster.points[0].y * std::cos(yawEstimate);
+    float C2StarMax = cluster.points[0].x * (-std::sin(yawEstimate)) + cluster.points[0].y * std::cos(yawEstimate);
+    Eigen::Vector3f sumXYZ(0.0f, 0.0f, 0.0f);
+    Eigen::Vector3f centerXYZ(0.0f, 0.0f, 0.0f);
     for (size_t i = 0; i < cluster.size(); ++i) {
-        centroid.x += cluster.points[i].x;
-        centroid.y += cluster.points[i].y;
-        centroid.z += cluster.points[i].z;
-
-        cvPoints(i, 0) = cluster.points[i].x;  // x
-        cvPoints(i, 1) = cluster.points[i].y;  // y
-
-        if (cluster.points[i].z < zMin || i == 0) {
-            zMin = cluster.points[i].z;
+        sumXYZ[0] += cluster.points[i].x;
+        sumXYZ[1] += cluster.points[i].y;
+        sumXYZ[2] += cluster.points[i].z;
+        C1Star[i] = cluster.points[i].x * std::cos(yawEstimate) + cluster.points[i].y * std::sin(yawEstimate);
+        C2Star[i] = cluster.points[i].x * (-std::sin(yawEstimate)) + cluster.points[i].y * std::cos(yawEstimate);
+        if (C1Star[i] > C1StarMax) {
+            C1StarMax = C1Star[i];
         }
-            
-        if (zMax < cluster.points[i].z || i == 0) {
-            zMax = cluster.points[i].z;
-            highestX = cluster.points[i].x;
-            highestY = cluster.points[i].y;
-            highestZ = cluster.points[i].z;
+        if (C1Star[i] < C1StarMin) {
+            C1StarMin = C1Star[i];
         }
-            
+        if (C2Star[i] > C2StarMax) {
+            C2StarMax = C2Star[i];
+        }
+        if (C2Star[i] < C2StarMin) {
+            C2StarMin = C2Star[i];
+        }
     }
-    centroid.x = centroid.x / static_cast<float>(cluster.size());
-    centroid.y = centroid.y / static_cast<float>(cluster.size());
-    centroid.z = centroid.z / static_cast<float>(cluster.size());
-   
-    // Calculate circumscribed circle on x-y plane
-    cv::Point2f center;
-    float radius;
-    cv::minEnclosingCircle(cv::Mat(cvPoints).reshape(2), center, radius);
+    centerXYZ = sumXYZ / static_cast<float>(cluster.size());
 
-    // Paper : Algo.2 Search-Based Rectangle Fitting
-    Eigen::Vector2f e1Star(std::cos(yawEstimate), std::sin(yawEstimate));  // col.11, Algo.2
-    Eigen::Vector2f e2Star(-std::sin(yawEstimate), std::cos(yawEstimate));
+    // Sort the cluster by z
+    std::vector<pcl::PointXYZI> sortedCluster(cluster.points.begin(), cluster.points.end());
+    std::sort(sortedCluster.begin(), sortedCluster.end(), [](const pcl::PointXYZI& a, const pcl::PointXYZI& b) {
+        return a.z > b.z;
+    });
 
-    std::vector<float> C1Star;  // col.11, Algo.2
-    std::vector<float> C2Star;  // col.11, Algo.2
-    C1Star.reserve(cluster.size());
-    C2Star.reserve(cluster.size());
-    for (const auto& point : cluster) {
-        C1Star.push_back(point.x * e1Star.x() + point.y * e1Star.y());
-        C2Star.push_back(point.x * e2Star.x() + point.y * e2Star.y());
+    // Calculate the center of the 10% highest point
+    size_t top_count = static_cast<size_t>(std::ceil(sortedCluster.size() * 0.1f));
+    Eigen::Vector3f partSumXYZ(0.0f, 0.0f, 0.0f);
+    Eigen::Vector3f highestPartCenterXYZ(0.0f, 0.0f, 0.0f);
+    for (size_t i = 0; i < top_count; ++i) {
+        partSumXYZ[0] += sortedCluster[i].x;
+        partSumXYZ[1] += sortedCluster[i].y;
+        partSumXYZ[2] += sortedCluster[i].z;
     }
+    highestPartCenterXYZ = partSumXYZ / static_cast<float>(top_count);
 
-    // col.12, Algo.2
-    const float C1StarMin = *std::min_element(C1Star.begin(), C1Star.end());
-    const float C1StarMax = *std::max_element(C1Star.begin(), C1Star.end());
-    const float C2StarMin = *std::min_element(C2Star.begin(), C2Star.end());
-    const float C2StarMax = *std::max_element(C2Star.begin(), C2Star.end());
-
+    // Calculate circumscribed circle on x-y plane using Search-Based Rectangle Fitting
     const float a1 = std::cos(yawEstimate);
     const float b1 = std::sin(yawEstimate);
     const float c1 = C1StarMin;
-    const float a2 = -1.0 * std::sin(yawEstimate);
+    const float a2 = -1.0f * std::sin(yawEstimate);
     const float b2 = std::cos(yawEstimate);
     const float c2 = C2StarMin;
     const float a3 = std::cos(yawEstimate);
     const float b3 = std::sin(yawEstimate);
     const float c3 = C1StarMax;
-    const float a4 = -1.0 * std::sin(yawEstimate);
+    const float a4 = -1.0f * std::sin(yawEstimate);
     const float b4 = std::cos(yawEstimate);
     const float c4 = C2StarMax;
 
-    // calc center of bounding box
-    float intersection_x_1 = (b1 * c2 - b2 * c1) / (a2 * b1 - a1 * b2);
-    float intersection_y_1 = (a1 * c2 - a2 * c1) / (a1 * b2 - a2 * b1);
-    float intersection_x_2 = (b3 * c4 - b4 * c3) / (a4 * b3 - a3 * b4);
-    float intersection_y_2 = (a3 * c4 - a4 * c3) / (a3 * b4 - a4 * b3);
+    // Calculate the center of the bounding box
+    float intersectionX1 = (b1 * c2 - b2 * c1) / (a2 * b1 - a1 * b2);
+    float intersectionY1 = (a1 * c2 - a2 * c1) / (a1 * b2 - a2 * b1);
+    float intersectionX2 = (b3 * c4 - b4 * c3) / (a4 * b3 - a3 * b4);
+    float intersectionY2 = (a3 * c4 - a4 * c3) / (a3 * b4 - a4 * b3);
 
-    // calc dimention of bounding box
-    Eigen::Vector2d ex;
-    Eigen::Vector2d ey;
-    ex << a1 / (std::sqrt(a1 * a1 + b1 * b1)), b1 / (std::sqrt(a1 * a1 + b1 * b1));
-    ey << a2 / (std::sqrt(a2 * a2 + b2 * b2)), b2 / (std::sqrt(a2 * a2 + b2 * b2));
-    Eigen::Vector2d diagVec;
-    diagVec << intersection_x_1 - intersection_x_2, intersection_y_1 - intersection_y_2;
+    // Calculate the dimension of the bounding box
+    Eigen::Vector2f ex(a1 / (std::sqrt(a1 * a1 + b1 * b1)), b1 / (std::sqrt(a1 * a1 + b1 * b1)));
+    Eigen::Vector2f ey(a2 / (std::sqrt(a2 * a2 + b2 * b2)), b2 / (std::sqrt(a2 * a2 + b2 * b2)));
+    Eigen::Vector2f diagVec(intersectionX1 - intersectionX2, intersectionY1 - intersectionY2);
 
-    cenX = (intersection_x_1 + intersection_x_2) / 2.0f;
-    cenY = (intersection_y_1 + intersection_y_2) / 2.0f;
-    cenZ = centroid.z;
+    cenX = (intersectionX1 + intersectionX2) / 2.0f;
+    cenY = (intersectionY1 + intersectionY2) / 2.0f;
+    cenZ = centerXYZ.z();
     length = std::fabs(ex.dot(diagVec));
     width = std::fabs(ey.dot(diagVec));
-
+    highestX = highestPartCenterXYZ[0];
+    highestY = highestPartCenterXYZ[1];
+    highestZ = highestPartCenterXYZ[2];
 }
 
 void imuCallback(const sensor_msgs::Imu& msg) {
@@ -444,7 +434,7 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 
         // 如果拟合成功，但是长宽不符合要求，跳过
         if (length > TARGET_VESSEL_LENGTH_MAX || width > TARGET_VESSEL_WIDTH_MAX || length < TARGET_VESSEL_LENGTH_MIN || width < TARGET_VESSEL_WIDTH_MIN) {
-            ROS_WARN("Cluster %d does not look like a vessel since it has a length = %.2f and width = %.2f.", static_cast<int>(it - clusterIndices.begin() + 1), length, width);
+            ROS_WARN("Cluster %d/%d does not look like a vessel since it has a length = %.2f and width = %.2f.", static_cast<int>(it - clusterIndices.begin() + 1), static_cast<int>(clusterIndices.end() - clusterIndices.begin() + 1), length, width);
             continue;
         }
 
