@@ -123,6 +123,9 @@ pcl::EuclideanClusterExtraction<pcl::PointXYZI> ecExtraction;
 bool isIMUSub = false;
 Eigen::Quaterniond imuPose;
 
+// 方向估计
+OrientationCalc orient_calc_("VARIANCE");
+
 // 点云过滤离群点，叶素滤波
 inline void cloudFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudPtr) {
 
@@ -413,7 +416,6 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         float highestX = 0.0f;
         float highestY = 0.0f;
         float highestZ = 0.0f;
-        orientation_calc orient_calc_("VARIANCE");
         bool isSuccessFitted = orient_calc_.LshapeFitting(*cloudCluster, yawEstimate);
 
         // 如果拟合失败，跳过

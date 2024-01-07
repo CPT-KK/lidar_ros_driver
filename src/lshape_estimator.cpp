@@ -16,62 +16,36 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
-bool orientation_calc::LshapeFitting(const pcl::PointCloud<pcl::PointXYZI> &cluster, float &theta_optim) {
+/* Paper : IV2017, Efficient L-Shape Fitting for Vehicle Detection Using Laser Scanners */
+bool OrientationCalc::LshapeFitting(const pcl::PointCloud<pcl::PointXYZI> &cluster, float &theta_optimal) {
     if (cluster.size() < 10)
         return false;
 
-    /* Paper : IV2017, Efficient L-Shape Fitting for Vehicle Detection Using Laser Scanners */
-    const float angle_reso = 0.5f * M_PI / 180.0f;
-    const float max_angle = M_PI / 2.0f;
-    float max_q = std::numeric_limits<float>::min();
-    float q;
-    std::vector<std::pair<float /*theta*/, float /*q*/>> Q;
-    Q.reserve(500);
-
-    // search
-    Eigen::Vector2f e_1;        // col.3, Algo.2
-    Eigen::Vector2f e_2;        // col.4, Algo.2
-    std::vector<float> C_1;     // col.5, Algo.2
-    std::vector<float> C_2;     // col.6, Algo.2
-    C_1.reserve(2000);
-    C_2.reserve(2000);
-    for (float theta = 0; theta < max_angle; theta += angle_reso) {
-        e_1 << std::cos(theta), std::sin(theta);
-        e_2 << -std::sin(theta), std::cos(theta);
-        // Eigen::Vector2f e_1(std::cos(theta), std::sin(theta));      // col.3, Algo.2
-        // Eigen::Vector2f e_2(-std::sin(theta), std::cos(theta));     // col.4, Algo.2
-        // std::vector<float> C_1;                   // col.5, Algo.2
-        // std::vector<float> C_2;                   // col.6, Algo.2
-        C_1.clear();
-        C_2.clear();
+    // Search
+    std::vector<float> Q_q;     // q
+    Q_q.reserve(theta_array.size() + 5);
+#pragma omp parallel for      
+    for (size_t i = 0; i < theta_array.size(); i++) {
+        std::vector<float> C_1;     // col.5, Algo.2
+        std::vector<float> C_2;     // col.6, Algo.2
+        C_1.reserve(cluster.size() + 100);
+        C_2.reserve(cluster.size() + 100); 
         for (const auto &point : cluster) {
-            C_1.push_back(point.x * e_1.x() + point.y * e_1.y());
-            C_2.push_back(point.x * e_2.x() + point.y * e_2.y());
+            C_1.push_back(point.x * std::cos(theta_array[i]) + point.y * std::sin(theta_array[i]));
+            C_2.push_back(point.x * (-std::sin(theta_array[i])) + point.y * std::cos(theta_array[i]));
         }
 
-        if (criterion_ == "AREA") {
-            q = calc_area_criterion(C_1, C_2);
-        } else if (criterion_ == "CLOSENESS") {
-            q = calc_closeness_criterion(C_1, C_2);
-        } else if (criterion_ == "VARIANCE") {
-            q = calc_variances_criterion(C_1, C_2);
-        } else {
-            std::cout << "L Shaped Algorithm Criterion Is Not Supported." << std::endl;
-            break;
-        }
-        Q.push_back(std::make_pair(theta, q));  // col.8, Algo.2
+        Q_q.push_back(calc_func_(C_1, C_2));
     }
 
-    for (size_t i = 0; i < Q.size(); ++i) {
-        if (Q[i].second > max_q || i == 0) {
-            max_q = Q[i].second;
-            theta_optim = Q[i].first;
-        }
-    }
+    int max_index = std::max_element(Q_q.begin(), Q_q.end()) - Q_q.begin();
+    // float max_q = Q_q[max_index];
+    theta_optimal = theta_array[max_index];
+
     return true;
 }
 
-float orientation_calc::calc_area_criterion(const std::vector<float> &C_1, const std::vector<float> &C_2) {
+float OrientationCalc::calc_area_criterion(const std::vector<float> &C_1, const std::vector<float> &C_2) {
     const float c1_min = *std::min_element(C_1.begin(), C_1.end());  // col.2, Algo.4
     const float c1_max = *std::max_element(C_1.begin(), C_1.end());  // col.2, Algo.4
     const float c2_min = *std::min_element(C_2.begin(), C_2.end());  // col.3, Algo.4
@@ -82,7 +56,7 @@ float orientation_calc::calc_area_criterion(const std::vector<float> &C_1, const
     return alpha;
 }
 
-float orientation_calc::calc_closeness_criterion(const std::vector<float> &C_1, const std::vector<float> &C_2) {
+float OrientationCalc::calc_closeness_criterion(const std::vector<float> &C_1, const std::vector<float> &C_2) {
     // Paper : Algo.4 Closeness Criterion
     const float min_c_1 = *std::min_element(C_1.begin(), C_1.end());  // col.2, Algo.4
     const float max_c_1 = *std::max_element(C_1.begin(), C_1.end());  // col.2, Algo.4
@@ -111,7 +85,7 @@ float orientation_calc::calc_closeness_criterion(const std::vector<float> &C_1, 
     return beta;
 }
 
-float orientation_calc::calc_variances_criterion(const std::vector<float> &C_1, const std::vector<float> &C_2) {
+float OrientationCalc::calc_variances_criterion(const std::vector<float> &C_1, const std::vector<float> &C_2) {
     const float c1_min = *std::min_element(C_1.begin(), C_1.end());  // col.2, Algo.4
     const float c1_max = *std::max_element(C_1.begin(), C_1.end());  // col.2, Algo.4
     const float c2_min = *std::min_element(C_2.begin(), C_2.end());  // col.3, Algo.4
@@ -157,7 +131,7 @@ float orientation_calc::calc_variances_criterion(const std::vector<float> &C_1, 
     return -v1 - v2;
 }
 
-float orientation_calc::calc_var(const std::vector<float> &v) {
+float OrientationCalc::calc_var(const std::vector<float> &v) {
     float sum = std::accumulate(std::begin(v), std::end(v), 0.0f);
     float mean = sum / v.size();
     float acc_var_num = 0.0f;
