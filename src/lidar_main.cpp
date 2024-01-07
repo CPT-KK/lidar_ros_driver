@@ -65,7 +65,7 @@
 #include "lshape_estimator.hpp"
 
 // Define
-#define LEFT_IS_HAP
+// #define LEFT_IS_HAP
 #define PRINT_LEVEL 1
 
 using namespace std;

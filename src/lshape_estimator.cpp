@@ -24,19 +24,26 @@ bool orientation_calc::LshapeFitting(const pcl::PointCloud<pcl::PointXYZI> &clus
     const float angle_reso = 0.5f * M_PI / 180.0f;
     const float max_angle = M_PI / 2.0f;
     float max_q = std::numeric_limits<float>::min();
-
     float q;
     std::vector<std::pair<float /*theta*/, float /*q*/>> Q;
+    Q.reserve(500);
 
     // search
+    Eigen::Vector2f e_1;        // col.3, Algo.2
+    Eigen::Vector2f e_2;        // col.4, Algo.2
+    std::vector<float> C_1;     // col.5, Algo.2
+    std::vector<float> C_2;     // col.6, Algo.2
+    C_1.reserve(2000);
+    C_2.reserve(2000);
     for (float theta = 0; theta < max_angle; theta += angle_reso) {
-        Eigen::Vector2d e_1;
-        e_1 << std::cos(theta), std::sin(theta);  // col.3, Algo.2
-        Eigen::Vector2d e_2;
-        e_2 << -std::sin(theta), std::cos(theta);  // col.4, Algo.2
-        std::vector<float> C_1;                   // col.5, Algo.2
-        std::vector<float> C_2;                   // col.6, Algo.2
-
+        e_1 << std::cos(theta), std::sin(theta);
+        e_2 << -std::sin(theta), std::cos(theta);
+        // Eigen::Vector2f e_1(std::cos(theta), std::sin(theta));      // col.3, Algo.2
+        // Eigen::Vector2f e_2(-std::sin(theta), std::cos(theta));     // col.4, Algo.2
+        // std::vector<float> C_1;                   // col.5, Algo.2
+        // std::vector<float> C_2;                   // col.6, Algo.2
+        C_1.clear();
+        C_2.clear();
         for (const auto &point : cluster) {
             C_1.push_back(point.x * e_1.x() + point.y * e_1.y());
             C_2.push_back(point.x * e_2.x() + point.y * e_2.y());
@@ -56,9 +63,9 @@ bool orientation_calc::LshapeFitting(const pcl::PointCloud<pcl::PointXYZI> &clus
     }
 
     for (size_t i = 0; i < Q.size(); ++i) {
-        if (Q.at(i).second > max_q || i == 0) {
-            max_q = Q.at(i).second;
-            theta_optim = Q.at(i).first;
+        if (Q[i].second > max_q || i == 0) {
+            max_q = Q[i].second;
+            theta_optim = Q[i].first;
         }
     }
     return true;
@@ -83,19 +90,20 @@ float orientation_calc::calc_closeness_criterion(const std::vector<float> &C_1, 
     const float max_c_2 = *std::max_element(C_2.begin(), C_2.end());  // col.3, Algo.4
 
     std::vector<float> D_1;  // col.4, Algo.4
+    D_1.reserve(2000);
     for (const auto &c_1_element : C_1) {
         const float v = std::min(std::fabs(max_c_1 - c_1_element), std::fabs(c_1_element - min_c_1));
         D_1.push_back(v);
     }
 
     std::vector<float> D_2;  // col.5, Algo.4
+    D_2.reserve(2000);
     for (const auto &c_2_element : C_2) {
         const float v = std::min(std::fabs(max_c_2 - c_2_element), std::fabs(c_2_element - min_c_2));
         D_2.push_back(v);
     }
 
-    float beta = 0;
-
+    float beta = 0.0f;
     for (size_t i = 0; i < D_1.size(); i++) {
         float d = std::max(std::min(D_1[i], D_2[i]), 0.05f);
         beta += (1.0f / d);
@@ -110,12 +118,14 @@ float orientation_calc::calc_variances_criterion(const std::vector<float> &C_1, 
     const float c2_max = *std::max_element(C_2.begin(), C_2.end());  // col.3, Algo.4
 
     std::vector<float> d1;  // col.4, Algo.4
+    d1.reserve(2000);
     for (const auto &c_1_element : C_1) {
         const float v = std::min(std::fabs(c1_max - c_1_element), std::fabs(c_1_element - c1_min));
         d1.push_back(v);
     }
 
     std::vector<float> d2;  // col.5, Algo.4
+    d2.reserve(2000);
     for (const auto &c_2_element : C_2) {
         const float v = std::min(std::fabs(c2_max - c_2_element), std::fabs(c_2_element - c2_min));
         d2.push_back(v);
@@ -123,9 +133,9 @@ float orientation_calc::calc_variances_criterion(const std::vector<float> &C_1, 
 
     std::vector<float> e1;
     std::vector<float> e2;
-
     assert(d1.size() == d2.size());
-
+    e1.reserve(d1.size()+10);
+    e2.reserve(d2.size()+10);
     for (size_t i = 0; i < d1.size(); i++) {
         if (d1[i] < d2[i]) {
             e1.push_back(d1[i]);
@@ -144,40 +154,15 @@ float orientation_calc::calc_variances_criterion(const std::vector<float> &C_1, 
         v2 = calc_var(e2);
     }
 
-    float gamma = -v1 - v2;
-
-    return gamma;
+    return -v1 - v2;
 }
 
 float orientation_calc::calc_var(const std::vector<float> &v) {
     float sum = std::accumulate(std::begin(v), std::end(v), 0.0f);
     float mean = sum / v.size();
-
     float acc_var_num = 0.0f;
 
     std::for_each(std::begin(v), std::end(v), [&](const float d) { acc_var_num += (d - mean) * (d - mean); });
 
-    float var = sqrt(acc_var_num / (v.size() - 1));
-    /*-------------------*/
-    // float v_mean = 0.0;
-    // float v_sum = 0.0;
-    // float v_sqr_sum = 0.0;
-    // float v_std = 0.0;
-
-    // for (size_t i = 0; i < v.size(); i++)
-    // {
-    //   v_sum += v[i];
-    // }
-    // v_mean = v_sum / v.size();
-
-    // for (size_t i = 0; i < v.size(); i++)
-    // {
-    //   v_sqr_sum += (v[i] - v_mean) * (v[i] - v_mean);
-    // }
-
-    // v_std = sqrt(v_sqr_sum / (v.size()-1));
-
-    // ROS_INFO("v_std-var=%f", v_std - var);
-
-    return var;
+    return sqrt(acc_var_num / (v.size() - 1));
 }
