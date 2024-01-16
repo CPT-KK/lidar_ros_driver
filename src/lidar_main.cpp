@@ -506,34 +506,6 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     #endif
 }
 
-void tmplidarCb(const sensor_msgs::PointCloud2::ConstPtr& lidar0) {
-    sensor_msgs::PointCloud2 cloud;
-    cloud.height = 1;
-    cloud.width = 1;
-    sensor_msgs::PointCloud2Modifier modifier(cloud);
-    modifier.setPointCloud2Fields(4, 
-                                 "x", 1, sensor_msgs::PointField::FLOAT32,
-                                 "y", 1, sensor_msgs::PointField::FLOAT32,
-                                 "z", 1, sensor_msgs::PointField::FLOAT32,
-                                 "intensity", 1, sensor_msgs::PointField::FLOAT32);
-    modifier.resize(cloud.width);
-
-    sensor_msgs::PointCloud2Iterator<float> iter_x(cloud, "x");
-    sensor_msgs::PointCloud2Iterator<float> iter_y(cloud, "y");
-    sensor_msgs::PointCloud2Iterator<float> iter_z(cloud, "z");
-    sensor_msgs::PointCloud2Iterator<float> iter_intensity(cloud, "intensity");
-
-    for (size_t i = 0; i < cloud.width; ++i, ++iter_x, ++iter_y, ++iter_z, ++iter_intensity) {
-        // 假设您有一个数组或类似的结构来存储您的点和强度
-        *iter_x = 0;
-        *iter_y = 0;
-        *iter_z = 0;
-        *iter_intensity = 0.517;
-    }
-
-    lidarCallback(lidar0, boost::make_shared<const sensor_msgs::PointCloud2>(cloud), boost::make_shared<const sensor_msgs::PointCloud2>(cloud), boost::make_shared<const sensor_msgs::PointCloud2>(cloud));
-}
-
 int main(int argc, char** argv) {
     // 初始化 ROS 节点
     ros::init(argc, argv, "lidar_usv_det");
@@ -587,14 +559,11 @@ int main(int argc, char** argv) {
     // 注册回调函数，当消息时间接近并准备同步时，该函数会被调用
     sync.registerCallback(boost::bind(&lidarCallback, _1, _2, _3, _4));
 
-    // TMP
-    ros::Subscriber lidarSub = nh.subscribe("/hesai/pandar", 1, tmplidarCb);
-
     // 预分配内存
     lidar1PC->points.reserve(250000);
     lidar2PC->points.reserve(250000);
     lidar3PC->points.reserve(250000);
-    lidar3PC->points.reserve(250000);
+    lidar4PC->points.reserve(250000);
     lidarRawPC->points.reserve(1000000);
     pc->points.reserve(500000);
     clusterIndices.reserve(20);
