@@ -24,18 +24,19 @@ bool OrientationCalc::LshapeFitting(const pcl::PointCloud<pcl::PointXYZI> &clust
     // Search
     std::vector<float> Q_q;     // q
     Q_q.reserve(theta_array.size() + 5);
-#pragma omp parallel for      
-    for (size_t i = 0; i < theta_array.size(); i++) {
-        std::vector<float> C_1;     // col.5, Algo.2
-        std::vector<float> C_2;     // col.6, Algo.2
-        C_1.reserve(cluster.size() + 100);
-        C_2.reserve(cluster.size() + 100); 
+    std::vector<float> C_1;     // col.5, Algo.2
+    std::vector<float> C_2;     // col.6, Algo.2
+    C_1.reserve(cluster.size() + 100);
+    C_2.reserve(cluster.size() + 100); 
+    for (size_t i = 0; i < theta_array.size(); i++) {      
         for (const auto &point : cluster) {
             C_1.push_back(point.x * std::cos(theta_array[i]) + point.y * std::sin(theta_array[i]));
             C_2.push_back(point.x * (-std::sin(theta_array[i])) + point.y * std::cos(theta_array[i]));
         }
 
         Q_q.push_back(calc_func_(C_1, C_2));
+        C_1.clear();
+        C_2.clear();
     }
 
     int max_index = std::max_element(Q_q.begin(), Q_q.end()) - Q_q.begin();

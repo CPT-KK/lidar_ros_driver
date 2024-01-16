@@ -397,11 +397,12 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     geometry_msgs::PoseArray objects;
     objects.header.stamp = ros::Time::now();
     objects.header.frame_id = "map";
-    objects.poses.reserve(clusterIndices.size());
+    objects.poses.reserve(2 * clusterIndices.size() + 5);
 #pragma omp parallel for  
     for (std::vector<pcl::PointIndices>::const_iterator it = clusterIndices.begin(); it != clusterIndices.end(); ++it) {
         // 创建临时保存点云簇的点云
         pcl::PointCloud<pcl::PointXYZI>::Ptr cloudCluster(new pcl::PointCloud<pcl::PointXYZI>);
+        cloudCluster->points.reserve(it->indices.size() + 100);
 
         // 通过下标，逐个填充
         for (std::vector<int>::const_iterator pit = it->indices.begin(); pit != it->indices.end(); pit++) {
