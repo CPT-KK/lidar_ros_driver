@@ -105,6 +105,7 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr lidar1PC(new pcl::PointCloud<pcl::PointXYZI
 pcl::PointCloud<pcl::PointXYZI>::Ptr lidar2PC(new pcl::PointCloud<pcl::PointXYZI>);
 pcl::PointCloud<pcl::PointXYZI>::Ptr lidar3PC(new pcl::PointCloud<pcl::PointXYZI>);
 pcl::PointCloud<pcl::PointXYZI>::Ptr lidar4PC(new pcl::PointCloud<pcl::PointXYZI>);
+pcl::PointCloud<pcl::PointXYZI>::Ptr lidar5PC(new pcl::PointCloud<pcl::PointXYZI>);
 pcl::PointCloud<pcl::PointXYZI>::Ptr lidarRawPC(new pcl::PointCloud<pcl::PointXYZI>);
 pcl::PointCloud<pcl::PointXYZI>::Ptr pc(new pcl::PointCloud<pcl::PointXYZI>);
 std::vector<pcl::PointIndices> clusterIndices;
@@ -298,7 +299,7 @@ void imuCallback(const sensor_msgs::Imu& msg) {
     imuPose = Eigen::Quaterniond(msg.orientation.w, msg.orientation.x, msg.orientation.y, msg.orientation.z);
 }
 
-void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const sensor_msgs::PointCloud2::ConstPtr& lidar1, const sensor_msgs::PointCloud2::ConstPtr& lidar2, const sensor_msgs::PointCloud2::ConstPtr& lidar3) {
+void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const sensor_msgs::PointCloud2::ConstPtr& lidar1, const sensor_msgs::PointCloud2::ConstPtr& lidar2, const sensor_msgs::PointCloud2::ConstPtr& lidar3, const sensor_msgs::PointCloud2::ConstPtr& lidar4) {
     // Record init time    
     #ifdef DEBUG
         #if PRINT_LEVEL > 0
@@ -320,7 +321,8 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     pcl::fromROSMsg(*lidar1, *lidar2PC);
     pcl::fromROSMsg(*lidar2, *lidar3PC);
     pcl::fromROSMsg(*lidar3, *lidar4PC);
-    *lidarRawPC = *lidar1PC + *lidar2PC + *lidar3PC + *lidar4PC;
+    pcl::fromROSMsg(*lidar4, *lidar5PC);
+    *lidarRawPC = *lidar1PC + *lidar2PC + *lidar3PC + *lidar4PC + *lidar5PC;
     #ifdef DEBUG
         #if PRINT_LEVEL > 0
             #if PRINT_LEVEL > 1
@@ -548,23 +550,25 @@ int main(int argc, char** argv) {
     imuSub = nh.subscribe("/usv/imu/data", 1, imuCallback);
 
     // 定义时间同步订阅
-    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_231", 3);
-    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar1(nh, "/livox/lidar_192_168_147_232", 3);
-    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar2(nh, "/livox/lidar_192_168_147_233", 3);
-    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar3(nh, "/livox/lidar_192_168_147_234", 3);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar0(nh, "/livox/lidar_192_168_147_231", 10);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar1(nh, "/livox/lidar_192_168_147_232", 10);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar2(nh, "/livox/lidar_192_168_147_233", 10);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar3(nh, "/livox/lidar_192_168_147_234", 10);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> subLidar4(nh, "/livox/lidar_192_168_147_230", 10);
 
     // 使用 ApproximateTime 策略定义同步器
-    typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> MySyncPolicy;
-    message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(4), subLidar0, subLidar1, subLidar2, subLidar3);
+    typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::PointCloud2, sensor_msgs::PointCloud2> MySyncPolicy;
+    message_filters::Synchronizer<MySyncPolicy> sync(MySyncPolicy(4), subLidar0, subLidar1, subLidar2, subLidar3, subLidar4);
     
     // 注册回调函数，当消息时间接近并准备同步时，该函数会被调用
-    sync.registerCallback(boost::bind(&lidarCallback, _1, _2, _3, _4));
+    sync.registerCallback(boost::bind(&lidarCallback, _1, _2, _3, _4, _5));
 
     // 预分配内存
     lidar1PC->points.reserve(250000);
     lidar2PC->points.reserve(250000);
     lidar3PC->points.reserve(250000);
     lidar4PC->points.reserve(250000);
+    lidar5PC->points.reserve(250000);
     lidarRawPC->points.reserve(1000000);
     pc->points.reserve(500000);
     clusterIndices.reserve(20);
