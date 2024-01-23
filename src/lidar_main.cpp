@@ -540,7 +540,8 @@ int main(int argc, char** argv) {
     nh.param<float>("target_vessel_width_min", TARGET_VESSEL_WIDTH_MIN, 0.25f);
     nh.param<float>("target_vessel_width_max", TARGET_VESSEL_WIDTH_MAX, 8.0f);
 
-    ROS_INFO("============ USV Lidar data process program ============");
+    
+    ROS_INFO("============ USV Lidar data process program STARTED! ============");
 
     // 定义发送
     postPCPub = nh.advertise<sensor_msgs::PointCloud2>("/filter/lidar", 1);
