@@ -356,7 +356,7 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         }
 
         // hook filter
-        if ((0.46 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < 0.69) || (-0.82 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -0.59)) {
+        if ((0.46 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < 0.69) || (-0.82 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -0.59) || (-2.66 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -2.36)) {
             if((1.8 < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 1.97) && (0.1 < lidarRawPC->points[i].z && lidarRawPC->points[i].z < 0.61)) {
                 continue;
             }
