@@ -356,11 +356,11 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         }
 
         // hook filter
-        if ((0.46 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < 0.69) || (-0.82 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -0.59) || (-2.66 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -2.36)) {
-            if((1.8 < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 1.97) && (0.1 < lidarRawPC->points[i].z && lidarRawPC->points[i].z < 0.61)) {
+        if ((0.1 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < 0.8) || (-0.9 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -0.53) || (-2.66 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -2.36)) {
+            if((1.8 < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 2.05) && (0.1 < lidarRawPC->points[i].z && lidarRawPC->points[i].z <= 0.61)) {
                 continue;
             }
-            if((1.97 < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 2.43) && (0.61 < lidarRawPC->points[i].z && lidarRawPC->points[i].z < 0.80)) {
+            if((1.97 < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 2.43) && (0.4 < lidarRawPC->points[i].z && lidarRawPC->points[i].z < 0.90)) {
                 continue;
             }
         }
