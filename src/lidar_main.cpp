@@ -356,14 +356,26 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         }
 
         // hook filter
-        if ((0.1 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < 0.8) || (-0.9 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -0.53) || (-2.66 < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -2.36)) {
-            if((1.8 < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 2.05) && (0.1 < lidarRawPC->points[i].z && lidarRawPC->points[i].z <= 0.61)) {
+        if (1.80f < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 2.50f && 0.1f < lidarRawPC->points[i].z && lidarRawPC->points[i].z <= 0.9f) {
+            if ((0.1f < lidarRawPC->points[i].x && lidarRawPC->points[i].x < 0.8f) || 
+            (-0.9f < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -0.53f) || 
+            (-2.66f < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -2.36f)) {
                 continue;
             }
-            if((1.97 < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 2.43) && (0.4 < lidarRawPC->points[i].z && lidarRawPC->points[i].z < 0.90)) {
-                continue;
-            }
+
         }
+        // if ((0.1f < lidarRawPC->points[i].x && lidarRawPC->points[i].x < 0.8f) || 
+        //     (-0.9f < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -0.53f) || 
+        //     (-2.66f < lidarRawPC->points[i].x && lidarRawPC->points[i].x < -2.36f)) {
+        //     if ((1.8f < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 2.05f) && 
+        //         (0.1f < lidarRawPC->points[i].z && lidarRawPC->points[i].z <= 0.61f)) {
+        //         continue;
+        //     }
+        //     if ((1.97f < lidarRawPC->points[i].y && lidarRawPC->points[i].y < 2.43f) && 
+        //         (0.4f < lidarRawPC->points[i].z && lidarRawPC->points[i].z < 0.90f)) {
+        //         continue;
+        //     }
+        // }
 
         // 现在的点应该是 OK 的
         Eigen::Vector3d thisPoint(lidarRawPC->points[i].x, lidarRawPC->points[i].y, lidarRawPC->points[i].z);
