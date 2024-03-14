@@ -1,5 +1,5 @@
 ## Intro
-This ROS package reads pointcloud data from 5 lidars and estimates the position and some attitude information of the clusters.
+This ROS package reads pointcloud data from 5 LiDARs and estimates the position and some attitude information of the clusters.
 
 ## Input 
 All inputs are in type `sensor_msgs/PointCloud2`.
@@ -40,4 +40,5 @@ Outputs are in topics:
 - Parameters can be adjusted in launch files
 
  ## Thanks
- L-shape fitting from [L-shape-fitting-3D-LiDAR-ROS](https://github.com/HMX2013/L-shape-fitting-3D-LiDAR-ROS) is used and modified for faster process speed.
+ - L-shape fitting from [L-shape-fitting-3D-LiDAR-ROS](https://github.com/HMX2013/L-shape-fitting-3D-LiDAR-ROS) is used and modified for faster process speed.
+ - Dr. Lv for providing the basic frame of the code.
