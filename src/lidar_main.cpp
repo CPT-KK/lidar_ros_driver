@@ -503,10 +503,18 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     objectPub.publish(objects); 
 
     // Publish processed pointcloud
+#pragma omp parallel for
+    for (size_t i = 0; i < pc->size(); i++) {
+        Eigen::Vector3d thisPoint(pc->points[i].x, pc->points[i].y, pc->points[i].z);
+        thisPoint = imuPose.conjugate() * thisPoint;
+        pc->points[i].x = thisPoint[0];
+        pc->points[i].y = thisPoint[1];
+        pc->points[i].z = thisPoint[2];
+    }
     sensor_msgs::PointCloud2 postPC;
     pcl::toROSMsg(*pc, postPC);
     postPC.header.stamp = ros::Time::now();
-    postPC.header.frame_id = "map";
+    postPC.header.frame_id = "base_link";
     postPCPub.publish(postPC);
     pc->clear();
 
