@@ -26,7 +26,6 @@
     <param name="target_vessel_width_min" type="double" value="0.25" />
     <param name="target_vessel_width_max" type="double" value="8.0" />
   </node>
-  <!-- <node pkg="rosbag" type="record" name="usv_lidar_rosbag" output="screen" args="/livox/lidar_192_168_147_231 /livox/lidar_192_168_147_232 /livox/lidar_192_168_147_233 -O /home/$(env USER)/usv_lidar.bag" /> -->
 
   <arg name="rviz" default="false" />
   <group if="$(arg rviz)">
