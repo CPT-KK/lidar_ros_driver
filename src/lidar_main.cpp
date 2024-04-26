@@ -71,7 +71,7 @@
 using namespace std;
 
 // ROS 订阅与接收定义
-ros::Publisher postPCPub, objectPub;
+ros::Publisher postPCPub, objectPub, objectBodyPub;
 ros::Subscriber imuSub, lidarSub;
 float X_MIN = 0.0f;
 float X_MAX = 0.0f;
@@ -379,7 +379,7 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 
         // 现在的点应该是 OK 的
         Eigen::Vector3d thisPoint(lidarRawPC->points[i].x, lidarRawPC->points[i].y, lidarRawPC->points[i].z);
-        thisPoint = imuPose * thisPoint;
+        thisPoint = imuPose * thisPoint; // Body -> ENU
 
         pcl::PointXYZI point_pcl = lidarRawPC->points[i];
         point_pcl.x = thisPoint[0];
@@ -418,10 +418,13 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     #endif
 
     // Cluster state estimation
-    geometry_msgs::PoseArray objects;
+    geometry_msgs::PoseArray objects, objects_b;
     objects.header.stamp = ros::Time::now();
     objects.header.frame_id = "map";
     objects.poses.reserve(2 * clusterIndices.size() + 5);
+    objects_b.header.stamp = ros::Time::now();
+    objects_b.header.frame_id = "base_link";
+    objects_b.poses.reserve(clusterIndices.size() + 5);
 #pragma omp parallel for  
     for (std::vector<pcl::PointIndices>::const_iterator it = clusterIndices.begin(); it != clusterIndices.end(); ++it) {
         // 创建临时保存点云簇的点云
@@ -469,9 +472,13 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
 
         // 如果拟合成功，且长宽符合要求，发布
         geometry_msgs::Pose objPose;
-        tf2::Quaternion quat;
+        // tf2::Quaternion quat;
+        Eigen::AngleAxisd rollAngle(0, Eigen::Vector3d::UnitX());
+        Eigen::AngleAxisd pitchAngle(0, Eigen::Vector3d::UnitY());
+        Eigen::AngleAxisd yawAngle(yawEstimate, Eigen::Vector3d::UnitZ());
+        Eigen::Quaterniond quat = yawAngle * pitchAngle * rollAngle;
 
-        quat.setEuler(0, 0, yawEstimate);
+        // quat.setEuler(0, 0, yawEstimate);
 
         objPose.position.x = cenX;
         objPose.position.y = cenY;
@@ -490,6 +497,18 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
         objPose.orientation.y = width;
         objPose.orientation.z = 0;
         objects.poses.push_back(objPose);
+
+        Eigen::Vector3d bodyPoint(cenX, cenY, cenZ);
+        bodyPoint = imuPose.conjugate() * bodyPoint;
+        quat = imuPose.conjugate() * quat;
+        objPose.position.x = bodyPoint(0);
+        objPose.position.y = bodyPoint(1);
+        objPose.position.z = bodyPoint(2);
+        objPose.orientation.w = quat.w();
+        objPose.orientation.x = quat.x();
+        objPose.orientation.y = quat.y();
+        objPose.orientation.z = quat.z();
+        objects_b.poses.push_back(objPose);
     }
     #ifdef DEBUG
         #if PRINT_LEVEL > 0
@@ -501,6 +520,7 @@ void lidarCallback(const sensor_msgs::PointCloud2::ConstPtr& lidar0, const senso
     
     // Publish object 
     objectPub.publish(objects); 
+    objectBodyPub.publish(objects_b);
 
     // Publish processed pointcloud
 #pragma omp parallel for
@@ -576,6 +596,7 @@ int main(int argc, char** argv) {
     // 定义发送
     postPCPub = nh.advertise<sensor_msgs::PointCloud2>("/filter/lidar", 1);
     objectPub = nh.advertise<geometry_msgs::PoseArray>("/filter/target", 1);
+    objectBodyPub = nh.advertise<geometry_msgs::PoseArray>("/filter/target_b", 1);
 
     // 定义订阅
     imuSub = nh.subscribe("/usv/imu/data", 1, imuCallback);
