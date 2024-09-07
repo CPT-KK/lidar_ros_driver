@@ -1,9 +1,3 @@
-/***************************************************************************************************************************
-@file:src/lidar_usv_det.cpp
-@author:ljn
-@date:2021.12
-@brief: detect the usv via lidar sensor
-***************************************************************************************************************************/
 // C base
 #include <iostream>
 #include <vector>
@@ -51,8 +45,6 @@
 #include <pcl/range_image/range_image.h>
 #include <pcl/sample_consensus/method_types.h>
 #include <pcl/sample_consensus/model_types.h>
-#include <pcl/search/kdtree.h>
-#include <pcl/segmentation/extract_clusters.h>
 #include <pcl/search/kdtree.h>
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl/segmentation/sac_segmentation.h>
